@@ -24,6 +24,8 @@ class PolicyContext:
     explicit_channel: ChannelType | None = None
     contact_preferred_channel: ChannelType | None = None
     configured_channels: set[ChannelType] = field(default_factory=set)
+    # Median seconds-to-reply per channel for this contact (absent = no data yet).
+    responsiveness: dict[ChannelType, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -41,8 +43,15 @@ def decide(ctx: PolicyContext) -> ChannelDecision:
     if ctx.body_length > LONG_FORM_THRESHOLD and ChannelType.EMAIL in usable:
         return ChannelDecision(ChannelType.EMAIL, "long-form content prefers email")
 
-    if ctx.urgency is Urgency.HIGH and ChannelType.SMS in usable:
-        return ChannelDecision(ChannelType.SMS, "high urgency prefers sms")
+    if ctx.urgency is Urgency.HIGH:
+        measured = {c: s for c, s in ctx.responsiveness.items() if c in usable}
+        if measured:
+            fastest = min(measured, key=lambda c: measured[c])
+            return ChannelDecision(
+                fastest, "high urgency prefers the contact's fastest channel"
+            )
+        if ChannelType.SMS in usable:
+            return ChannelDecision(ChannelType.SMS, "high urgency prefers sms")
 
     if ctx.current_channel in usable:
         return ChannelDecision(ctx.current_channel, "stay on current channel")

@@ -76,6 +76,32 @@ curl -s localhost:8000/v1/conversations/<id>/call \
 
 While the call is open, agent messages to the conversation are queued and spoken into the call; the human's speech comes back as inbound voice messages in the same transcript. v1 voice uses Twilio's built-in speech recognition (`<Gather input="speech">`) and TTS (`<Say>`) — no separate speech providers needed. The Twilio voice adapter requires `CONTACTHOP_PUBLIC_BASE_URL` so Twilio can reach the call webhooks; a streaming Media Streams pipeline (lower latency, barge-in) is the planned upgrade path.
 
+## Python SDK
+
+The SDK ships inside the same package: a typed async client plus a decorator-based agent app.
+
+```python
+from contacthop.sdk import Agent
+
+hop = Agent(base_url="http://127.0.0.1:8000")
+
+@hop.on_message
+async def handle(ctx, message):
+    context = await ctx.context()          # digest + recent messages, prompt-ready
+    reply = await my_llm(context, message)  # your model, your loop
+    await ctx.send(reply, follow_up_after=3600)
+
+@hop.on_follow_up
+async def nudge(ctx, payload):
+    await ctx.send("Still there?", channel=payload["suggested_channel"])
+
+app = hop.app  # run: uvicorn my_agent:app --port 9000
+```
+
+Point `CONTACTHOP_AGENT_WEBHOOK_URL=http://127.0.0.1:9000/` at it and every inbound message — SMS, email, or spoken voice turn — lands in `handle`. The client is also usable standalone (`ContactHopClient`) for scripting: `create_contact`, `create_conversation`, `send`, `call`, `switch`, `transcript`, `context`, `stats`. See `examples/echo_agent.py`.
+
+The policy engine also learns per-contact responsiveness: `GET /v1/contacts/<id>/stats` exposes median reply latency per channel, and high-urgency messages automatically use the contact's fastest-responding channel once data exists.
+
 ## Configuration
 
 Settings come from environment variables (or a `.env` file), prefixed with `CONTACTHOP_`:

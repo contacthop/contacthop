@@ -46,7 +46,9 @@ async def inbound_email(
     )
     message = await record_inbound(session, inbound)
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
-    background.add_task(
-        notify_agent, settings, inbound_notification(message, identity.contact_id)
-    )
+    notification = inbound_notification(message, identity.contact_id)
+    # Commit before the notification runs: the agent may synchronously call
+    # back into the API, which must not collide with this open transaction.
+    await session.commit()
+    background.add_task(notify_agent, settings, notification)
     return {"status": "accepted"}

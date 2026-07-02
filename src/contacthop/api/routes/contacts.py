@@ -6,7 +6,13 @@ from fastapi import APIRouter, HTTPException
 
 from contacthop.api.deps import SessionDep
 from contacthop.domain.models import ChannelIdentity, Contact
-from contacthop.domain.schemas import ChannelIdentityCreate, ContactCreate, ContactRead
+from contacthop.domain.schemas import (
+    ChannelIdentityCreate,
+    ContactCreate,
+    ContactRead,
+    ContactStatsRead,
+)
+from contacthop.memory.stats import channel_responsiveness
 
 router = APIRouter(prefix="/v1/contacts", tags=["contacts"])
 
@@ -28,6 +34,18 @@ async def get_contact(contact_id: uuid.UUID, session: SessionDep) -> Contact:
     if contact is None:
         raise HTTPException(status_code=404, detail="contact not found")
     return contact
+
+
+@router.get("/{contact_id}/stats", response_model=ContactStatsRead)
+async def get_stats(contact_id: uuid.UUID, session: SessionDep) -> ContactStatsRead:
+    """How fast this contact replies on each channel (median seconds)."""
+    contact = await session.get(Contact, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="contact not found")
+    return ContactStatsRead(
+        contact_id=contact_id,
+        median_reply_seconds=await channel_responsiveness(session, contact_id),
+    )
 
 
 @router.post("/{contact_id}/identities", response_model=ContactRead, status_code=201)

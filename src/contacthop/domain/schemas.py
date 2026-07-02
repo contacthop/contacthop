@@ -141,6 +141,22 @@ class InboundMessage(BaseModel):
     channel_meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConversationContextRead(BaseModel):
+    """What an agent needs to compose its next turn: goal, digest, recent verbatim."""
+
+    conversation_id: uuid.UUID
+    goal: str | None
+    current_channel: ChannelType
+    summary: str
+    recent_messages: list[MessageRead]
+
+
+class ContactStatsRead(BaseModel):
+    contact_id: uuid.UUID
+    # Median seconds from an agent message to the human's reply, per channel.
+    median_reply_seconds: dict[ChannelType, float]
+
+
 class AgentNotification(BaseModel):
     """Payload pushed to the agent's webhook when a conversation event occurs."""
 

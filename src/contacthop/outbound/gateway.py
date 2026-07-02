@@ -24,6 +24,7 @@ from contacthop.domain.enums import (
 )
 from contacthop.domain.models import Conversation, ConversationEvent, FollowUp, Message, utcnow
 from contacthop.domain.schemas import AgentMessageCreate
+from contacthop.memory.stats import channel_responsiveness
 from contacthop.orchestrator.policy import ChannelDecision, PolicyContext, decide
 from contacthop.orchestrator.voice import get_open_session, queue_speech
 from contacthop.outbound.formatting import email_send_meta
@@ -82,6 +83,7 @@ async def send_agent_message(
             urgency=agent_msg.urgency,
             explicit_channel=agent_msg.channel,
             contact_preferred_channel=ChannelType(preferred) if preferred else None,
+            responsiveness=await channel_responsiveness(session, contact.id),
         )
     )
 

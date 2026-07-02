@@ -108,16 +108,16 @@ async def turn(
         session.add(message)
         await cancel_follow_ups(session, conversation.id)
         await session.flush()
-        background.add_task(
-            notify_agent,
-            settings,
-            AgentNotification(
-                event="conversation.message.received",
-                conversation_id=conversation.id,
-                contact_id=conversation.contact_id,
-                message=MessageRead.model_validate(message),
-            ),
+        notification = AgentNotification(
+            event="conversation.message.received",
+            conversation_id=conversation.id,
+            contact_id=conversation.contact_id,
+            message=MessageRead.model_validate(message),
         )
+        # Commit before the notification runs: the agent may synchronously call
+        # back into the API, which must not collide with this open transaction.
+        await session.commit()
+        background.add_task(notify_agent, settings, notification)
 
     cont = f"{base}/webhooks/twilio/voice/continue?conversation_id={conversation_id}&amp;polls=0"
     return _twiml(f'<Pause length="1"/><Redirect method="POST">{cont}</Redirect>')

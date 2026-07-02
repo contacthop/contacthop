@@ -22,11 +22,13 @@ from contacthop.domain.schemas import (
     CallRequest,
     ChannelSessionRead,
     ChannelSwitchRequest,
+    ConversationContextRead,
     ConversationCreate,
     ConversationRead,
     EventRead,
     MessageRead,
 )
+from contacthop.memory.transcript import build_context
 from contacthop.orchestrator.voice import get_open_session, open_session, queue_speech
 from contacthop.outbound.gateway import send_agent_message
 
@@ -72,6 +74,22 @@ async def get_transcript(conversation_id: uuid.UUID, session: SessionDep) -> lis
         .order_by(Message.created_at, Message.id)
     )
     return list(result.scalars())
+
+
+@router.get("/{conversation_id}/context", response_model=ConversationContextRead)
+async def get_context(
+    conversation_id: uuid.UUID, session: SessionDep, recent: int = 20
+) -> ConversationContextRead:
+    """Prompt-ready context: digest of older history + the recent window verbatim."""
+    conversation = await _get_conversation(session, conversation_id)
+    summary, recent_messages = await build_context(session, conversation, recent_window=recent)
+    return ConversationContextRead(
+        conversation_id=conversation.id,
+        goal=conversation.goal,
+        current_channel=conversation.current_channel,
+        summary=summary,
+        recent_messages=[MessageRead.model_validate(m) for m in recent_messages],
+    )
 
 
 @router.get("/{conversation_id}/events", response_model=list[EventRead])
