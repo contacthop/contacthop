@@ -6,9 +6,10 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from contacthop import __version__
+from contacthop.api.deps import require_api_key
 from contacthop.api.routes import contacts, conversations
 from contacthop.api.webhooks import email_inbound, twilio_sms, twilio_voice
 from contacthop.channels.base import ChannelAdapter
@@ -38,10 +39,16 @@ def build_adapters(settings: Settings) -> dict[ChannelType, ChannelAdapter]:
                 "sms_adapter='twilio' requires CONTACTHOP_TWILIO_ACCOUNT_SID, "
                 "CONTACTHOP_TWILIO_AUTH_TOKEN, and CONTACTHOP_TWILIO_FROM_NUMBER"
             )
+        status_callback = (
+            f"{settings.public_base_url}/webhooks/twilio/sms/status"
+            if settings.public_base_url
+            else None
+        )
         adapters[ChannelType.SMS] = TwilioSMSAdapter(
             settings.twilio_account_sid,
             settings.twilio_auth_token,
             settings.twilio_from_number,
+            status_callback_url=status_callback,
         )
     else:
         adapters[ChannelType.SMS] = ConsoleSMSAdapter()
@@ -111,8 +118,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.adapters = adapters
     app.state.scheduler = scheduler
 
-    app.include_router(contacts.router)
-    app.include_router(conversations.router)
+    protected = [Depends(require_api_key)]
+    app.include_router(contacts.router, dependencies=protected)
+    app.include_router(conversations.router, dependencies=protected)
     app.include_router(twilio_sms.router)
     app.include_router(twilio_voice.router)
     app.include_router(email_inbound.router)

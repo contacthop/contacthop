@@ -32,6 +32,7 @@ from contacthop.memory.transcript import build_context
 from contacthop.orchestrator.voice import get_open_session, open_session, queue_speech
 from contacthop.orchestrator.windows import channel_window, open_channels
 from contacthop.outbound.gateway import send_agent_message
+from contacthop.outbound.limits import enforce_rate_limit
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 
@@ -150,6 +151,7 @@ async def originate_call(
 ) -> ChannelSession:
     """Dial the contact now. ``body`` becomes the agent's opening line once answered."""
     conversation = await _get_conversation(session, conversation_id)
+    await enforce_rate_limit(session, settings, conversation.contact)
 
     adapter = adapters.get(ChannelType.VOICE)
     if adapter is None or not hasattr(adapter, "originate_call"):

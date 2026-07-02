@@ -30,6 +30,7 @@ from contacthop.orchestrator.policy import ChannelDecision, PolicyContext, decid
 from contacthop.orchestrator.voice import get_open_session, queue_speech
 from contacthop.orchestrator.windows import channel_window, open_channels
 from contacthop.outbound.formatting import email_send_meta
+from contacthop.outbound.limits import enforce_rate_limit
 
 
 async def _maybe_schedule_follow_up(
@@ -69,6 +70,8 @@ async def send_agent_message(
     contact = conversation.contact
     identities = {i.channel: i for i in contact.identities}
     preferred = contact.preferences.get("preferred_channel")
+
+    await enforce_rate_limit(session, settings, contact)
 
     # A live call makes voice available regardless of identities — the open
     # session is the reachable address.

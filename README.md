@@ -124,6 +124,8 @@ cp demo.env .env
 | `CONTACTHOP_FOLLOW_UP_POLL_INTERVAL` | `5.0` | Seconds between scheduler sweeps for due follow-ups |
 | `CONTACTHOP_SEND_WINDOW_SMS` / `_EMAIL` / `_VOICE` | — (always) | Per-channel send window (quiet hours), `HH:MM-HH:MM`, may wrap midnight |
 | `CONTACTHOP_DEFAULT_TIMEZONE` | `UTC` | IANA timezone the windows are evaluated in when a contact has none |
+| `CONTACTHOP_API_KEYS` | — (open) | Comma-separated Bearer tokens required on the `/v1` management API |
+| `CONTACTHOP_MAX_MESSAGES_PER_HOUR` | `30` | Per-contact outbound cap, rolling hour, all channels; `0` = unlimited |
 
 ### Send windows (quiet hours)
 
@@ -139,6 +141,14 @@ Enforcement is a hard backstop in the outbound gateway — below the policy engi
 - policy-routed sends automatically hop to a channel that's open (SMS closed at 6pm, email open → the reply goes out as email),
 - placing calls outside the voice window is rejected, and escalation suggestions skip closed channels,
 - the one exemption: speaking into an **already-live** voice call is always allowed — the human is on the line.
+
+### Auth, rate limits & delivery receipts
+
+Set `CONTACTHOP_API_KEYS` and every `/v1` endpoint requires `Authorization: Bearer <key>` (the SDK's `api_key` parameter sends it). Webhooks and `/health` are unaffected — webhooks authenticate with provider signatures and shared secrets instead.
+
+`CONTACTHOP_MAX_MESSAGES_PER_HOUR` caps outbound messages (and call originations) per contact across all channels in a rolling hour — the anti-spam half of the gateway backstop. Inbound messages never count against it, and contacts can carry their own limit via `preferences: {"max_messages_per_hour": 10}`. Exceeding it returns 429.
+
+With `PUBLIC_BASE_URL` set, Twilio delivery receipts flow into `POST /webhooks/twilio/sms/status` and keep `Message.delivery_status` honest (`sent` → `delivered`/`failed`). Failed deliveries are logged as conversation events and pushed to the agent as `conversation.message.failed`, so it can retry on another channel.
 
 ## Development
 

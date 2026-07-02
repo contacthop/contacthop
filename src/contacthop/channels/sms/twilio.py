@@ -18,19 +18,27 @@ TWILIO_API = "https://api.twilio.com/2010-04-01"
 class TwilioSMSAdapter:
     channel = ChannelType.SMS
 
-    def __init__(self, account_sid: str, auth_token: str, from_number: str) -> None:
+    def __init__(
+        self,
+        account_sid: str,
+        auth_token: str,
+        from_number: str,
+        status_callback_url: str | None = None,
+    ) -> None:
         self.account_sid = account_sid
         self.auth_token = auth_token
         self.from_number = from_number
+        self.status_callback_url = status_callback_url
 
     async def send(
         self, to_address: str, body: str, meta: dict[str, Any] | None = None
     ) -> ProviderReceipt:
         url = f"{TWILIO_API}/Accounts/{self.account_sid}/Messages.json"
+        data = {"To": to_address, "From": self.from_number, "Body": body}
+        if self.status_callback_url:
+            data["StatusCallback"] = self.status_callback_url
         async with httpx.AsyncClient(auth=(self.account_sid, self.auth_token)) as client:
-            resp = await client.post(
-                url, data={"To": to_address, "From": self.from_number, "Body": body}
-            )
+            resp = await client.post(url, data=data)
         if resp.status_code >= 400:
             raise ChannelSendError(f"Twilio send failed ({resp.status_code}): {resp.text}")
         payload = resp.json()

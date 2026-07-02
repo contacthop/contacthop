@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     # Where inbound conversation events are pushed for the agent runtime.
     agent_webhook_url: str | None = None
 
+    # Comma-separated Bearer tokens required on the /v1 management API.
+    # Unset = open (dev mode). Webhooks use their own verification instead.
+    api_keys: str | None = None
+
+    # Per-contact outbound cap across all channels, rolling hour. 0 = unlimited.
+    # Contacts can override via preferences["max_messages_per_hour"].
+    max_messages_per_hour: int = 30
+
     # How often the in-process scheduler checks for due follow-ups.
     follow_up_poll_interval: float = 5.0
 
