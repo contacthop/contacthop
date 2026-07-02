@@ -1,12 +1,17 @@
 """Outbound gateway: every agent reply flows through here.
 
 Runs the policy engine, resolves the contact's address on the chosen channel,
-sends via the adapter, and persists the message plus any channel-switch event.
+sends via the adapter, persists the message plus any channel-switch event, and
+schedules a no-reply follow-up when the agent asks for one.
 """
 
 from __future__ import annotations
 
+from datetime import timedelta
+from typing import Any
+
 from fastapi import HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contacthop.channels.base import ChannelAdapter, ChannelSendError
@@ -15,10 +20,12 @@ from contacthop.domain.enums import (
     DeliveryStatus,
     Direction,
     EventType,
+    FollowUpStatus,
 )
-from contacthop.domain.models import Conversation, ConversationEvent, Message
+from contacthop.domain.models import Conversation, ConversationEvent, FollowUp, Message, utcnow
 from contacthop.domain.schemas import AgentMessageCreate
 from contacthop.orchestrator.policy import ChannelDecision, PolicyContext, decide
+from contacthop.outbound.formatting import email_send_meta
 
 
 async def send_agent_message(
@@ -55,8 +62,12 @@ async def send_agent_message(
             detail=f"contact has no {decision.channel} identity",
         )
 
+    send_meta: dict[str, Any] | None = None
+    if decision.channel is ChannelType.EMAIL:
+        send_meta = await email_send_meta(session, conversation)
+
     try:
-        receipt = await adapter.send(identity.address, agent_msg.body)
+        receipt = await adapter.send(identity.address, agent_msg.body, send_meta)
     except ChannelSendError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -88,4 +99,24 @@ async def send_agent_message(
     )
     session.add(message)
     await session.flush()
+
+    if agent_msg.follow_up_after is not None:
+        prior_attempts = await session.scalar(
+            select(func.count())
+            .select_from(FollowUp)
+            .where(
+                FollowUp.conversation_id == conversation.id,
+                FollowUp.status == FollowUpStatus.FIRED,
+            )
+        )
+        session.add(
+            FollowUp(
+                conversation_id=conversation.id,
+                message_id=message.id,
+                due_at=utcnow() + timedelta(seconds=agent_msg.follow_up_after),
+                attempt=(prior_attempts or 0) + 1,
+            )
+        )
+        await session.flush()
+
     return message

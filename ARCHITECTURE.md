@@ -234,7 +234,9 @@ async def decide(ctx: PolicyContext) -> ChannelDecision: ...
 
 `PolicyContext` carries: message urgency (agent-declared), payload shape (long-form / attachments ⇒ email), contact preferences and quiet hours, per-channel responsiveness stats (median reply latency per channel for this contact), time of day, and whether a live session is already open. Policies are ordered rules with a default; the agent may pass `channel="email"` explicitly to override, and the override is recorded as an event.
 
-Escalation is the time-driven half of the same engine: a no-reply timeout job (arq, scheduled at send time) re-invokes the policy with `attempt=n`, producing ladders like *SMS → wait 2h → email → wait 1 day → voice call*.
+Escalation is the time-driven half of the same engine: a no-reply timeout job (scheduled at send time) re-invokes the policy with `attempt=n`, producing ladders like *SMS → wait 2h → email → wait 1 day → voice call*.
+
+> Implementation note: follow-ups are persisted `FollowUp` rows fired by an in-process poll loop (`orchestrator/scheduler.py`), which keeps single-process deployments dependency-free. The Redis/arq worker becomes the firing mechanism at horizontal scale without changing the data model.
 
 ### 6.3 Cross-channel continuity
 

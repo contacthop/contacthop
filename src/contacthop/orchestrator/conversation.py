@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contacthop.config import Settings
@@ -15,12 +16,14 @@ from contacthop.domain.enums import (
     DeliveryStatus,
     Direction,
     EventType,
+    FollowUpStatus,
 )
 from contacthop.domain.models import (
     ChannelIdentity,
     Contact,
     Conversation,
     ConversationEvent,
+    FollowUp,
     Message,
 )
 from contacthop.domain.schemas import AgentNotification, InboundMessage, MessageRead
@@ -50,7 +53,7 @@ async def resolve_identity(
 
 
 async def active_conversation_for(
-    session: AsyncSession, contact_id: object, channel: ChannelType
+    session: AsyncSession, contact_id: uuid.UUID, channel: ChannelType
 ) -> Conversation:
     """Most recent active conversation for the contact, or a new one on this channel."""
     result = await session.execute(
@@ -71,7 +74,10 @@ async def active_conversation_for(
 
 
 async def record_inbound(session: AsyncSession, inbound: InboundMessage) -> Message:
-    """Normalize an adapter-parsed inbound message into the conversation timeline."""
+    """Normalize an adapter-parsed inbound message into the conversation timeline.
+
+    Also cancels any pending no-reply follow-ups — the human replied.
+    """
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
     conversation = await active_conversation_for(session, identity.contact_id, inbound.channel)
 
@@ -89,6 +95,15 @@ async def record_inbound(session: AsyncSession, inbound: InboundMessage) -> Mess
         )
         conversation.current_channel = inbound.channel
 
+    await session.execute(
+        update(FollowUp)
+        .where(
+            FollowUp.conversation_id == conversation.id,
+            FollowUp.status == FollowUpStatus.PENDING,
+        )
+        .values(status=FollowUpStatus.CANCELLED)
+    )
+
     message = Message(
         conversation_id=conversation.id,
         direction=Direction.INBOUND,
@@ -105,16 +120,19 @@ async def record_inbound(session: AsyncSession, inbound: InboundMessage) -> Mess
     return message
 
 
-async def notify_agent(settings: Settings, message: Message, contact_id: object) -> None:
+def inbound_notification(message: Message, contact_id: uuid.UUID) -> AgentNotification:
+    return AgentNotification(
+        event="conversation.message.received",
+        conversation_id=message.conversation_id,
+        contact_id=contact_id,
+        message=MessageRead.model_validate(message),
+    )
+
+
+async def notify_agent(settings: Settings, notification: AgentNotification) -> None:
     """Push a conversation event to the agent runtime's webhook, if configured."""
     if not settings.agent_webhook_url:
         return
-    notification = AgentNotification(
-        event="conversation.message.received",
-        conversation_id=message.conversation_id,  # type: ignore[arg-type]
-        contact_id=contact_id,  # type: ignore[arg-type]
-        message=MessageRead.model_validate(message),
-    )
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(

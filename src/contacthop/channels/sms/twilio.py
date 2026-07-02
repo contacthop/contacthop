@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+from typing import Any
 
 import httpx
 
@@ -22,7 +23,9 @@ class TwilioSMSAdapter:
         self.auth_token = auth_token
         self.from_number = from_number
 
-    async def send(self, to_address: str, body: str) -> ProviderReceipt:
+    async def send(
+        self, to_address: str, body: str, meta: dict[str, Any] | None = None
+    ) -> ProviderReceipt:
         url = f"{TWILIO_API}/Accounts/{self.account_sid}/Messages.json"
         async with httpx.AsyncClient(auth=(self.account_sid, self.auth_token)) as client:
             resp = await client.post(

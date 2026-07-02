@@ -10,13 +10,16 @@ from fastapi import FastAPI
 
 from contacthop import __version__
 from contacthop.api.routes import contacts, conversations
-from contacthop.api.webhooks import twilio_sms
+from contacthop.api.webhooks import email_inbound, twilio_sms
 from contacthop.channels.base import ChannelAdapter
+from contacthop.channels.email.console import ConsoleEmailAdapter
+from contacthop.channels.email.smtp import SMTPEmailAdapter
 from contacthop.channels.sms.console import ConsoleSMSAdapter
 from contacthop.channels.sms.twilio import TwilioSMSAdapter
 from contacthop.config import Settings
 from contacthop.db.session import Database
 from contacthop.domain.enums import ChannelType
+from contacthop.orchestrator.scheduler import FollowUpScheduler
 
 logger = logging.getLogger("contacthop")
 
@@ -40,28 +43,56 @@ def build_adapters(settings: Settings) -> dict[ChannelType, ChannelAdapter]:
         )
     else:
         adapters[ChannelType.SMS] = ConsoleSMSAdapter()
+
+    if settings.email_adapter == "smtp":
+        if not (settings.smtp_host and settings.smtp_from_address):
+            raise ValueError(
+                "email_adapter='smtp' requires CONTACTHOP_SMTP_HOST and "
+                "CONTACTHOP_SMTP_FROM_ADDRESS"
+            )
+        adapters[ChannelType.EMAIL] = SMTPEmailAdapter(
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            from_address=settings.smtp_from_address,
+            username=settings.smtp_username,
+            password=settings.smtp_password,
+            starttls=settings.smtp_starttls,
+        )
+    elif settings.email_adapter == "console":
+        adapters[ChannelType.EMAIL] = ConsoleEmailAdapter()
     return adapters
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     db = Database(settings.database_url)
+    adapters = build_adapters(settings)
+    scheduler = FollowUpScheduler(db, settings, set(adapters))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await db.create_all()
-        logger.info("ContactHop %s ready (sms adapter: %s)", __version__, settings.sms_adapter)
+        await scheduler.start()
+        logger.info(
+            "ContactHop %s ready (sms: %s, email: %s)",
+            __version__,
+            settings.sms_adapter,
+            settings.email_adapter,
+        )
         yield
+        await scheduler.stop()
         await db.dispose()
 
     app = FastAPI(title="ContactHop", version=__version__, lifespan=lifespan)
     app.state.settings = settings
     app.state.db = db
-    app.state.adapters = build_adapters(settings)
+    app.state.adapters = adapters
+    app.state.scheduler = scheduler
 
     app.include_router(contacts.router)
     app.include_router(conversations.router)
     app.include_router(twilio_sms.router)
+    app.include_router(email_inbound.router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

@@ -8,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from contacthop.api.deps import AdaptersDep, SessionDep
+from contacthop.domain.enums import EventType
 from contacthop.domain.models import Contact, Conversation, ConversationEvent, Message
 from contacthop.domain.schemas import (
     AgentMessageCreate,
+    ChannelSwitchRequest,
     ConversationCreate,
     ConversationRead,
     EventRead,
@@ -71,6 +73,29 @@ async def get_events(conversation_id: uuid.UUID, session: SessionDep) -> list[Co
         .order_by(ConversationEvent.created_at, ConversationEvent.id)
     )
     return list(result.scalars())
+
+
+@router.post("/{conversation_id}/switch", response_model=ConversationRead)
+async def switch_channel(
+    conversation_id: uuid.UUID, payload: ChannelSwitchRequest, session: SessionDep
+) -> Conversation:
+    """Explicitly move the conversation to another channel; subsequent sends default there."""
+    conversation = await _get_conversation(session, conversation_id)
+    if conversation.current_channel != payload.channel:
+        session.add(
+            ConversationEvent(
+                conversation_id=conversation.id,
+                type=EventType.CHANNEL_SWITCH,
+                payload={
+                    "from": conversation.current_channel,
+                    "to": payload.channel,
+                    "reason": payload.reason,
+                },
+            )
+        )
+        conversation.current_channel = payload.channel
+        await session.flush()
+    return conversation
 
 
 @router.post("/{conversation_id}/messages", response_model=MessageRead, status_code=201)

@@ -36,6 +36,12 @@ class EventType(StrEnum):
     NOTE = "note"
 
 
+class FollowUpStatus(StrEnum):
+    PENDING = "pending"
+    FIRED = "fired"
+    CANCELLED = "cancelled"
+
+
 class Urgency(StrEnum):
     LOW = "low"
     NORMAL = "normal"

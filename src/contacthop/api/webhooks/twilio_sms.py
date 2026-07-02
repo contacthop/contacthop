@@ -12,7 +12,12 @@ from contacthop.api.deps import SessionDep, SettingsDep
 from contacthop.channels.sms.twilio import verify_twilio_signature
 from contacthop.domain.enums import ChannelType
 from contacthop.domain.schemas import InboundMessage
-from contacthop.orchestrator.conversation import notify_agent, record_inbound, resolve_identity
+from contacthop.orchestrator.conversation import (
+    inbound_notification,
+    notify_agent,
+    record_inbound,
+    resolve_identity,
+)
 
 router = APIRouter(prefix="/webhooks/twilio", tags=["webhooks"])
 
@@ -45,7 +50,9 @@ async def inbound_sms(
     )
     message = await record_inbound(session, inbound)
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
-    background.add_task(notify_agent, settings, message, identity.contact_id)
+    background.add_task(
+        notify_agent, settings, inbound_notification(message, identity.contact_id)
+    )
 
     # Empty TwiML: acknowledge without auto-replying; the agent decides the reply.
     return Response(

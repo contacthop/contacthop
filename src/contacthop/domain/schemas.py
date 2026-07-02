@@ -69,6 +69,24 @@ class AgentMessageCreate(BaseModel):
     body: str = Field(min_length=1)
     channel: ChannelType | None = None
     urgency: Urgency = Urgency.NORMAL
+    # Seconds to wait for a human reply before firing a no-reply escalation event.
+    follow_up_after: float | None = Field(default=None, ge=0)
+
+
+class ChannelSwitchRequest(BaseModel):
+    channel: ChannelType
+    reason: str = "agent requested"
+
+
+class EmailInboundPayload(BaseModel):
+    """Normalized inbound email. Bridge any provider's inbound-parse webhook to this."""
+
+    from_address: str
+    to_address: str = ""
+    subject: str | None = None
+    text: str = Field(min_length=1)
+    message_id: str | None = None
+    in_reply_to: str | None = None
 
 
 class MessageRead(BaseModel):
@@ -111,3 +129,4 @@ class AgentNotification(BaseModel):
     conversation_id: uuid.UUID
     contact_id: uuid.UUID
     message: MessageRead | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)

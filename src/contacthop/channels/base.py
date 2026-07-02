@@ -21,4 +21,12 @@ class ChannelSendError(Exception):
 class ChannelAdapter(Protocol):
     channel: ChannelType
 
-    async def send(self, to_address: str, body: str) -> ProviderReceipt: ...
+    async def send(
+        self, to_address: str, body: str, meta: dict[str, Any] | None = None
+    ) -> ProviderReceipt:
+        """Deliver ``body`` to ``to_address``.
+
+        ``meta`` carries channel-specific hints (email subject and threading
+        headers, etc.); adapters ignore keys they don't understand.
+        """
+        ...

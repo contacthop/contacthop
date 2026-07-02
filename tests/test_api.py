@@ -57,7 +57,7 @@ def test_send_to_unconfigured_channel_is_rejected(client: TestClient) -> None:
 
     resp = client.post(
         f"/v1/conversations/{conversation['id']}/messages",
-        json={"body": "long report attached", "channel": "email"},
+        json={"body": "calling you now", "channel": "voice"},
     )
     assert resp.status_code == 422
     assert "no adapter configured" in resp.json()["detail"]

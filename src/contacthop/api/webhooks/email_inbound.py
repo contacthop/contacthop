@@ -1,0 +1,52 @@
+"""Generic inbound email webhook.
+
+Accepts a normalized JSON payload so any provider (SendGrid Inbound Parse, SES,
+Postmark, Mailgun) can be bridged with a tiny mapping layer. Optionally guarded
+by a shared secret (``CONTACTHOP_EMAIL_INBOUND_TOKEN``).
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+
+from contacthop.api.deps import SessionDep, SettingsDep
+from contacthop.domain.enums import ChannelType
+from contacthop.domain.schemas import EmailInboundPayload, InboundMessage
+from contacthop.orchestrator.conversation import (
+    inbound_notification,
+    notify_agent,
+    record_inbound,
+    resolve_identity,
+)
+
+router = APIRouter(prefix="/webhooks/email", tags=["webhooks"])
+
+
+@router.post("/inbound", status_code=202)
+async def inbound_email(
+    payload: EmailInboundPayload,
+    session: SessionDep,
+    settings: SettingsDep,
+    background: BackgroundTasks,
+    x_contacthop_token: str | None = Header(default=None),
+) -> dict[str, str]:
+    if settings.email_inbound_token and x_contacthop_token != settings.email_inbound_token:
+        raise HTTPException(status_code=403, detail="invalid inbound token")
+
+    inbound = InboundMessage(
+        channel=ChannelType.EMAIL,
+        from_address=payload.from_address,
+        to_address=payload.to_address,
+        body=payload.text,
+        provider_message_id=payload.message_id,
+        channel_meta={
+            "subject": payload.subject,
+            "in_reply_to": payload.in_reply_to,
+        },
+    )
+    message = await record_inbound(session, inbound)
+    identity = await resolve_identity(session, inbound.channel, inbound.from_address)
+    background.add_task(
+        notify_agent, settings, inbound_notification(message, identity.contact_id)
+    )
+    return {"status": "accepted"}
