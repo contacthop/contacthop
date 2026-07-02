@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contacthop.channels.base import ChannelAdapter, ChannelSendError
+from contacthop.config import Settings
 from contacthop.domain.enums import (
     ChannelType,
     DeliveryStatus,
@@ -27,6 +28,7 @@ from contacthop.domain.schemas import AgentMessageCreate
 from contacthop.memory.stats import channel_responsiveness
 from contacthop.orchestrator.policy import ChannelDecision, PolicyContext, decide
 from contacthop.orchestrator.voice import get_open_session, queue_speech
+from contacthop.orchestrator.windows import channel_window, open_channels
 from contacthop.outbound.formatting import email_send_meta
 
 
@@ -62,6 +64,7 @@ async def send_agent_message(
     conversation: Conversation,
     agent_msg: AgentMessageCreate,
     adapters: dict[ChannelType, ChannelAdapter],
+    settings: Settings,
 ) -> Message:
     contact = conversation.contact
     identities = {i.channel: i for i in contact.identities}
@@ -74,11 +77,32 @@ async def send_agent_message(
     if open_call is not None:
         available.add(ChannelType.VOICE)
 
+    # Quiet-hours backstop: closed channels are removed from policy input, and
+    # a live call exempts voice — the human is already on the line. Explicit
+    # and current channels are included so "closed window" is only reported
+    # for channels a window actually closes (missing adapters/identities keep
+    # their own, more specific errors).
+    candidate_channels = set(adapters) | available | {conversation.current_channel}
+    if agent_msg.channel is not None:
+        candidate_channels.add(agent_msg.channel)
+    open_now = open_channels(settings, contact, candidate_channels)
+    if open_call is not None:
+        open_now.add(ChannelType.VOICE)
+    if agent_msg.channel is not None and agent_msg.channel not in open_now:
+        window = channel_window(settings, contact, agent_msg.channel)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"channel '{agent_msg.channel}' is outside its send window"
+                f" ({window}); it reopens later or another channel can be used"
+            ),
+        )
+
     decision: ChannelDecision = decide(
         PolicyContext(
             current_channel=conversation.current_channel,
             available_channels=available,
-            configured_channels=set(adapters),
+            configured_channels=set(adapters) & open_now,
             body_length=len(agent_msg.body),
             urgency=agent_msg.urgency,
             explicit_channel=agent_msg.channel,
@@ -86,6 +110,11 @@ async def send_agent_message(
             responsiveness=await channel_responsiveness(session, contact.id),
         )
     )
+    if decision.channel not in open_now:
+        raise HTTPException(
+            status_code=422,
+            detail="all usable channels are outside their send windows right now",
+        )
 
     adapter = adapters.get(decision.channel)
     if adapter is None:

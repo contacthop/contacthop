@@ -104,7 +104,11 @@ The policy engine also learns per-contact responsiveness: `GET /v1/contacts/<id>
 
 ## Configuration
 
-Settings come from environment variables (or a `.env` file), prefixed with `CONTACTHOP_`:
+Settings come from environment variables (or a `.env` file), prefixed with `CONTACTHOP_`. Start from the annotated template:
+
+```bash
+cp demo.env .env
+```
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -118,6 +122,23 @@ Settings come from environment variables (or a `.env` file), prefixed with `CONT
 | `CONTACTHOP_PUBLIC_BASE_URL` | — | Public URL of this deployment, used for webhook signature validation |
 | `CONTACTHOP_AGENT_WEBHOOK_URL` | — | Where conversation events are pushed for your agent |
 | `CONTACTHOP_FOLLOW_UP_POLL_INTERVAL` | `5.0` | Seconds between scheduler sweeps for due follow-ups |
+| `CONTACTHOP_SEND_WINDOW_SMS` / `_EMAIL` / `_VOICE` | — (always) | Per-channel send window (quiet hours), `HH:MM-HH:MM`, may wrap midnight |
+| `CONTACTHOP_DEFAULT_TIMEZONE` | `UTC` | IANA timezone the windows are evaluated in when a contact has none |
+
+### Send windows (quiet hours)
+
+Windows like `CONTACTHOP_SEND_WINDOW_SMS=08:00-17:00` restrict when each channel may be used, evaluated in the contact's timezone (`preferences["timezone"]`, falling back to `DEFAULT_TIMEZONE`). Contacts can carry per-channel nuance that overrides the deployment defaults:
+
+```json
+{"timezone": "America/Chicago", "send_windows": {"sms": "09:00-20:00", "voice": "12:00-13:00"}}
+```
+
+Enforcement is a hard backstop in the outbound gateway — below the policy engine, so even a buggy agent can't text someone at 3am:
+
+- explicit sends on a closed channel are rejected (422 with the window in the detail),
+- policy-routed sends automatically hop to a channel that's open (SMS closed at 6pm, email open → the reply goes out as email),
+- placing calls outside the voice window is rejected, and escalation suggestions skip closed channels,
+- the one exemption: speaking into an **already-live** voice call is always allowed — the human is on the line.
 
 ## Development
 

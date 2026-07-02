@@ -30,6 +30,7 @@ from contacthop.domain.schemas import (
 )
 from contacthop.memory.transcript import build_context
 from contacthop.orchestrator.voice import get_open_session, open_session, queue_speech
+from contacthop.orchestrator.windows import channel_window, open_channels
 from contacthop.outbound.gateway import send_agent_message
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
@@ -132,9 +133,10 @@ async def send_message(
     payload: AgentMessageCreate,
     session: SessionDep,
     adapters: AdaptersDep,
+    settings: SettingsDep,
 ) -> Message:
     conversation = await _get_conversation(session, conversation_id)
-    return await send_agent_message(session, conversation, payload, adapters)
+    return await send_agent_message(session, conversation, payload, adapters, settings)
 
 
 @router.post("/{conversation_id}/call", response_model=ChannelSessionRead, status_code=201)
@@ -153,6 +155,14 @@ async def originate_call(
     if adapter is None or not hasattr(adapter, "originate_call"):
         raise HTTPException(status_code=422, detail="no voice adapter configured")
     voice_adapter: VoiceAdapter = adapter
+    if ChannelType.VOICE not in open_channels(
+        settings, conversation.contact, {ChannelType.VOICE}
+    ):
+        window = channel_window(settings, conversation.contact, ChannelType.VOICE)
+        raise HTTPException(
+            status_code=422,
+            detail=f"voice is outside its send window ({window}); cannot place a call now",
+        )
     if await get_open_session(session, conversation.id) is not None:
         raise HTTPException(status_code=409, detail="a call is already in progress")
 

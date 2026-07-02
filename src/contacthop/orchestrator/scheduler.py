@@ -20,6 +20,7 @@ from contacthop.domain.models import Conversation, ConversationEvent, FollowUp, 
 from contacthop.domain.schemas import AgentNotification
 from contacthop.orchestrator.conversation import notify_agent
 from contacthop.orchestrator.escalation import next_channel
+from contacthop.orchestrator.windows import open_channels
 
 logger = logging.getLogger("contacthop.scheduler")
 
@@ -67,8 +68,12 @@ class FollowUpScheduler:
                     follow_up.status = FollowUpStatus.CANCELLED
                     continue
                 available = {i.channel for i in conversation.contact.identities}
+                # Suggest only channels currently inside their send window.
+                open_now = open_channels(
+                    self.settings, conversation.contact, self.configured_channels
+                )
                 suggested = next_channel(
-                    conversation.current_channel, available, self.configured_channels
+                    conversation.current_channel, available, open_now
                 )
                 follow_up.status = FollowUpStatus.FIRED
                 payload = {

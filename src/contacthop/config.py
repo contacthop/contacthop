@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from typing import Literal
+from zoneinfo import ZoneInfo
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from contacthop.orchestrator.windows import parse_window
 
 
 class Settings(BaseSettings):
@@ -40,3 +44,29 @@ class Settings(BaseSettings):
 
     # How often the in-process scheduler checks for due follow-ups.
     follow_up_poll_interval: float = 5.0
+
+    # Send windows (quiet hours), per channel: "HH:MM-HH:MM" in the contact's
+    # timezone; wraps midnight if start > end; unset = always allowed. Contacts
+    # can override per channel via preferences["send_windows"].
+    send_window_sms: str | None = None
+    send_window_email: str | None = None
+    send_window_voice: str | None = None
+    # Timezone the windows are evaluated in when a contact has no
+    # preferences["timezone"] of their own (IANA name, e.g. America/Chicago).
+    default_timezone: str = "UTC"
+
+    @field_validator("send_window_sms", "send_window_email", "send_window_voice")
+    @classmethod
+    def _valid_window(cls, value: str | None) -> str | None:
+        if value and value.strip().lower() not in {"always", "any", "24/7"}:
+            parse_window(value)  # fail fast at startup on malformed specs
+        return value
+
+    @field_validator("default_timezone")
+    @classmethod
+    def _valid_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except Exception as exc:  # ZoneInfoNotFoundError subclasses KeyError
+            raise ValueError(f"unknown IANA timezone {value!r}") from exc
+        return value
