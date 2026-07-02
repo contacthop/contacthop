@@ -14,6 +14,7 @@ from contacthop.domain.enums import (
     DeliveryStatus,
     Direction,
     EventType,
+    SessionState,
     Urgency,
 )
 
@@ -76,6 +77,24 @@ class AgentMessageCreate(BaseModel):
 class ChannelSwitchRequest(BaseModel):
     channel: ChannelType
     reason: str = "agent requested"
+
+
+class CallRequest(BaseModel):
+    """Originate a voice call; ``body`` is the agent's opening line once answered."""
+
+    body: str | None = None
+
+
+class ChannelSessionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    channel: ChannelType
+    state: SessionState
+    session_meta: dict[str, Any]
+    created_at: datetime
+    closed_at: datetime | None
 
 
 class EmailInboundPayload(BaseModel):

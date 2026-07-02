@@ -36,6 +36,11 @@ class EventType(StrEnum):
     NOTE = "note"
 
 
+class SessionState(StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
 class FollowUpStatus(StrEnum):
     PENDING = "pending"
     FIRED = "fired"

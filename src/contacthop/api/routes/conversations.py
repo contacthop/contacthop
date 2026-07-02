@@ -2,22 +2,32 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from contacthop.api.deps import AdaptersDep, SessionDep
-from contacthop.domain.enums import EventType
-from contacthop.domain.models import Contact, Conversation, ConversationEvent, Message
+from contacthop.api.deps import AdaptersDep, SessionDep, SettingsDep
+from contacthop.channels.base import ChannelSendError, VoiceAdapter
+from contacthop.domain.enums import ChannelType, EventType
+from contacthop.domain.models import (
+    ChannelSession,
+    Contact,
+    Conversation,
+    ConversationEvent,
+    Message,
+)
 from contacthop.domain.schemas import (
     AgentMessageCreate,
+    CallRequest,
+    ChannelSessionRead,
     ChannelSwitchRequest,
     ConversationCreate,
     ConversationRead,
     EventRead,
     MessageRead,
 )
+from contacthop.orchestrator.voice import get_open_session, open_session, queue_speech
 from contacthop.outbound.gateway import send_agent_message
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
@@ -107,3 +117,72 @@ async def send_message(
 ) -> Message:
     conversation = await _get_conversation(session, conversation_id)
     return await send_agent_message(session, conversation, payload, adapters)
+
+
+@router.post("/{conversation_id}/call", response_model=ChannelSessionRead, status_code=201)
+async def originate_call(
+    conversation_id: uuid.UUID,
+    payload: CallRequest,
+    request: Request,
+    session: SessionDep,
+    adapters: AdaptersDep,
+    settings: SettingsDep,
+) -> ChannelSession:
+    """Dial the contact now. ``body`` becomes the agent's opening line once answered."""
+    conversation = await _get_conversation(session, conversation_id)
+
+    adapter = adapters.get(ChannelType.VOICE)
+    if adapter is None or not hasattr(adapter, "originate_call"):
+        raise HTTPException(status_code=422, detail="no voice adapter configured")
+    voice_adapter: VoiceAdapter = adapter
+    if await get_open_session(session, conversation.id) is not None:
+        raise HTTPException(status_code=409, detail="a call is already in progress")
+
+    # Voice dials a phone number: a dedicated voice identity, or the SMS number.
+    identities = {i.channel: i for i in conversation.contact.identities}
+    identity = identities.get(ChannelType.VOICE) or identities.get(ChannelType.SMS)
+    if identity is None:
+        raise HTTPException(status_code=422, detail="contact has no phone number identity")
+
+    base = settings.public_base_url or str(request.base_url).rstrip("/")
+    answer_url = f"{base}/webhooks/twilio/voice/answer?conversation_id={conversation.id}"
+    status_url = f"{base}/webhooks/twilio/voice/status?conversation_id={conversation.id}"
+    try:
+        receipt = await voice_adapter.originate_call(identity.address, answer_url, status_url)
+    except ChannelSendError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    channel_session = await open_session(
+        session, conversation.id, receipt.provider_message_id, str(receipt.meta.get("adapter"))
+    )
+    if payload.body:
+        await queue_speech(session, conversation, payload.body, "call opening line")
+
+    if conversation.current_channel != ChannelType.VOICE:
+        session.add(
+            ConversationEvent(
+                conversation_id=conversation.id,
+                type=EventType.CHANNEL_SWITCH,
+                payload={
+                    "from": conversation.current_channel,
+                    "to": ChannelType.VOICE,
+                    "reason": "call originated",
+                },
+            )
+        )
+        conversation.current_channel = ChannelType.VOICE
+        await session.flush()
+    return channel_session
+
+
+@router.get("/{conversation_id}/sessions", response_model=list[ChannelSessionRead])
+async def list_sessions(
+    conversation_id: uuid.UUID, session: SessionDep
+) -> list[ChannelSession]:
+    await _get_conversation(session, conversation_id)
+    result = await session.execute(
+        select(ChannelSession)
+        .where(ChannelSession.conversation_id == conversation_id)
+        .order_by(ChannelSession.created_at, ChannelSession.id)
+    )
+    return list(result.scalars())

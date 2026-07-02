@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
+
+from contacthop.config import Settings
+from contacthop.main import create_app
 
 
 def make_contact(client: TestClient) -> dict:
@@ -51,16 +56,26 @@ def test_agent_send_and_transcript_roundtrip(client: TestClient) -> None:
     assert bodies == ["Hi Ada — following up about the demo."]
 
 
-def test_send_to_unconfigured_channel_is_rejected(client: TestClient) -> None:
-    contact = make_contact(client)
-    conversation = make_conversation(client, contact["id"])
-
-    resp = client.post(
-        f"/v1/conversations/{conversation['id']}/messages",
-        json={"body": "calling you now", "channel": "voice"},
+def test_send_to_unconfigured_channel_is_rejected(tmp_path: Path) -> None:
+    settings = Settings(
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'novoice.db'}",
+        voice_adapter="none",
+        _env_file=None,  # type: ignore[call-arg]
     )
-    assert resp.status_code == 422
-    assert "no adapter configured" in resp.json()["detail"]
+    with TestClient(create_app(settings)) as client:
+        contact = make_contact(client)
+        conversation = make_conversation(client, contact["id"])
+
+        resp = client.post(
+            f"/v1/conversations/{conversation['id']}/messages",
+            json={"body": "calling you now", "channel": "voice"},
+        )
+        assert resp.status_code == 422
+        assert "no adapter configured" in resp.json()["detail"]
+
+        call = client.post(f"/v1/conversations/{conversation['id']}/call", json={})
+        assert call.status_code == 422
+        assert "no voice adapter" in call.json()["detail"]
 
 
 def test_inbound_sms_webhook_known_contact(client: TestClient) -> None:

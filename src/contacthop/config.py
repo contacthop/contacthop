@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # "console" logs outbound messages instead of sending them — zero-credential dev mode.
     sms_adapter: Literal["console", "twilio"] = "console"
     email_adapter: Literal["none", "console", "smtp"] = "console"
+    voice_adapter: Literal["none", "console", "twilio"] = "console"
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None

@@ -65,6 +65,17 @@ Inbound messages arrive via provider webhooks — `POST /webhooks/twilio/sms` fo
 
 Other useful endpoints: `POST /v1/conversations/<id>/switch` to move a conversation to another channel explicitly, and `POST /v1/contacts/<id>/identities` to attach additional addresses to a contact (cross-channel identity resolution).
 
+### Voice calls
+
+Originate a call with an opening line; the call becomes an open channel session:
+
+```bash
+curl -s localhost:8000/v1/conversations/<id>/call \
+  -H 'content-type: application/json' -d '{"body": "Hi Ada, quick question about the demo."}'
+```
+
+While the call is open, agent messages to the conversation are queued and spoken into the call; the human's speech comes back as inbound voice messages in the same transcript. v1 voice uses Twilio's built-in speech recognition (`<Gather input="speech">`) and TTS (`<Say>`) — no separate speech providers needed. The Twilio voice adapter requires `CONTACTHOP_PUBLIC_BASE_URL` so Twilio can reach the call webhooks; a streaming Media Streams pipeline (lower latency, barge-in) is the planned upgrade path.
+
 ## Configuration
 
 Settings come from environment variables (or a `.env` file), prefixed with `CONTACTHOP_`:
@@ -74,6 +85,7 @@ Settings come from environment variables (or a `.env` file), prefixed with `CONT
 | `CONTACTHOP_DATABASE_URL` | `sqlite+aiosqlite:///contacthop.db` | Any async SQLAlchemy URL (use `postgresql+asyncpg://…` in production) |
 | `CONTACTHOP_SMS_ADAPTER` | `console` | `console` or `twilio` |
 | `CONTACTHOP_EMAIL_ADAPTER` | `console` | `none`, `console`, or `smtp` |
+| `CONTACTHOP_VOICE_ADAPTER` | `console` | `none`, `console`, or `twilio` (twilio also needs `PUBLIC_BASE_URL`) |
 | `CONTACTHOP_TWILIO_ACCOUNT_SID` / `_AUTH_TOKEN` / `_FROM_NUMBER` | — | Required for the Twilio adapter |
 | `CONTACTHOP_SMTP_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` / `_FROM_ADDRESS` / `_STARTTLS` | — | Required for the SMTP adapter (host + from address at minimum) |
 | `CONTACTHOP_EMAIL_INBOUND_TOKEN` | — | Shared secret (`X-ContactHop-Token`) guarding the inbound email webhook |

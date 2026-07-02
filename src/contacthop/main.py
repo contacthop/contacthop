@@ -10,12 +10,14 @@ from fastapi import FastAPI
 
 from contacthop import __version__
 from contacthop.api.routes import contacts, conversations
-from contacthop.api.webhooks import email_inbound, twilio_sms
+from contacthop.api.webhooks import email_inbound, twilio_sms, twilio_voice
 from contacthop.channels.base import ChannelAdapter
 from contacthop.channels.email.console import ConsoleEmailAdapter
 from contacthop.channels.email.smtp import SMTPEmailAdapter
 from contacthop.channels.sms.console import ConsoleSMSAdapter
 from contacthop.channels.sms.twilio import TwilioSMSAdapter
+from contacthop.channels.voice.console import ConsoleVoiceAdapter
+from contacthop.channels.voice.twilio_call import TwilioVoiceAdapter
 from contacthop.config import Settings
 from contacthop.db.session import Database
 from contacthop.domain.enums import ChannelType
@@ -60,6 +62,26 @@ def build_adapters(settings: Settings) -> dict[ChannelType, ChannelAdapter]:
         )
     elif settings.email_adapter == "console":
         adapters[ChannelType.EMAIL] = ConsoleEmailAdapter()
+
+    if settings.voice_adapter == "twilio":
+        if not (
+            settings.twilio_account_sid
+            and settings.twilio_auth_token
+            and settings.twilio_from_number
+            and settings.public_base_url
+        ):
+            raise ValueError(
+                "voice_adapter='twilio' requires CONTACTHOP_TWILIO_ACCOUNT_SID, "
+                "CONTACTHOP_TWILIO_AUTH_TOKEN, CONTACTHOP_TWILIO_FROM_NUMBER, and "
+                "CONTACTHOP_PUBLIC_BASE_URL (Twilio must reach the voice webhooks)"
+            )
+        adapters[ChannelType.VOICE] = TwilioVoiceAdapter(
+            settings.twilio_account_sid,
+            settings.twilio_auth_token,
+            settings.twilio_from_number,
+        )
+    elif settings.voice_adapter == "console":
+        adapters[ChannelType.VOICE] = ConsoleVoiceAdapter()
     return adapters
 
 
@@ -92,6 +114,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(contacts.router)
     app.include_router(conversations.router)
     app.include_router(twilio_sms.router)
+    app.include_router(twilio_voice.router)
     app.include_router(email_inbound.router)
 
     @app.get("/health", tags=["health"])

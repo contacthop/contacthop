@@ -18,6 +18,7 @@ from contacthop.domain.enums import (
     Direction,
     EventType,
     FollowUpStatus,
+    SessionState,
 )
 
 E = TypeVar("E", bound=StrEnum)
@@ -118,6 +119,25 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class ChannelSession(Base):
+    """A stateful channel attachment — e.g. a live voice call. Cheap channels don't need one."""
+
+    __tablename__ = "channel_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id"), index=True
+    )
+    channel: Mapped[ChannelType] = mapped_column(str_enum(ChannelType))
+    state: Mapped[SessionState] = mapped_column(
+        str_enum(SessionState), default=SessionState.OPEN
+    )
+    # Provider handles: call SID, media-stream ids, etc.
+    session_meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FollowUp(Base):

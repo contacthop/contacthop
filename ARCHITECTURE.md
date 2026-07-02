@@ -261,6 +261,8 @@ Twilio call ⇄ Media Streams WS ⇄ /ws/voice/{session_id}
 
 The pipeline handles barge-in (human speaks over TTS ⇒ cancel synthesis), endpointing (when is the human done talking), and writes the final transcript of each turn into the same `Message` table — so a phone call and a text message are indistinguishable to the memory layer.
 
+> Implementation note: v1 voice (shipped) uses Twilio's TwiML primitives instead of a media-stream bridge — `<Say>` for TTS and `<Gather input="speech">` for STT, with a webhook loop (`answer` → `turn` → `continue`) that drains agent replies queued on the conversation. That gives working tri-modal conversations with zero additional speech providers; the Media Streams pipeline above is the upgrade path for low-latency, barge-in-capable calls.
+
 ### 6.5 Agent interface
 
 Agents integrate one of three ways, all built on the same event schema:

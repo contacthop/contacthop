@@ -73,6 +73,18 @@ async def active_conversation_for(
     return conversation
 
 
+async def cancel_follow_ups(session: AsyncSession, conversation_id: uuid.UUID) -> None:
+    """The human replied — pending no-reply follow-ups are moot."""
+    await session.execute(
+        update(FollowUp)
+        .where(
+            FollowUp.conversation_id == conversation_id,
+            FollowUp.status == FollowUpStatus.PENDING,
+        )
+        .values(status=FollowUpStatus.CANCELLED)
+    )
+
+
 async def record_inbound(session: AsyncSession, inbound: InboundMessage) -> Message:
     """Normalize an adapter-parsed inbound message into the conversation timeline.
 
@@ -95,14 +107,7 @@ async def record_inbound(session: AsyncSession, inbound: InboundMessage) -> Mess
         )
         conversation.current_channel = inbound.channel
 
-    await session.execute(
-        update(FollowUp)
-        .where(
-            FollowUp.conversation_id == conversation.id,
-            FollowUp.status == FollowUpStatus.PENDING,
-        )
-        .values(status=FollowUpStatus.CANCELLED)
-    )
+    await cancel_follow_ups(session, conversation.id)
 
     message = Message(
         conversation_id=conversation.id,

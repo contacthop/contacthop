@@ -30,3 +30,12 @@ class ChannelAdapter(Protocol):
         headers, etc.); adapters ignore keys they don't understand.
         """
         ...
+
+
+class VoiceAdapter(ChannelAdapter, Protocol):
+    """Voice is session-based: calls are originated, then speech flows through the
+    live session (queued messages drained by the call webhooks), not ``send()``."""
+
+    async def originate_call(
+        self, to_address: str, answer_url: str, status_url: str
+    ) -> ProviderReceipt: ...

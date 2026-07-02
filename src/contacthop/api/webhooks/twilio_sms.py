@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
 
 from contacthop.api.deps import SessionDep, SettingsDep
-from contacthop.channels.sms.twilio import verify_twilio_signature
+from contacthop.api.webhooks.twilio_common import require_twilio_signature
 from contacthop.domain.enums import ChannelType
 from contacthop.domain.schemas import InboundMessage
 from contacthop.orchestrator.conversation import (
@@ -30,13 +30,7 @@ async def inbound_sms(
     background: BackgroundTasks,
 ) -> Response:
     form = {k: str(v) for k, v in (await request.form()).items()}
-
-    if settings.twilio_auth_token:
-        signature = request.headers.get("X-Twilio-Signature", "")
-        base = settings.public_base_url or str(request.base_url).rstrip("/")
-        url = base + request.url.path
-        if not verify_twilio_signature(settings.twilio_auth_token, url, form, signature):
-            raise HTTPException(status_code=403, detail="invalid Twilio signature")
+    await require_twilio_signature(request, settings, form)
 
     if not form.get("From") or "Body" not in form:
         raise HTTPException(status_code=400, detail="missing From or Body")

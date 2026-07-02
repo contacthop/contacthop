@@ -25,7 +25,35 @@ from contacthop.domain.enums import (
 from contacthop.domain.models import Conversation, ConversationEvent, FollowUp, Message, utcnow
 from contacthop.domain.schemas import AgentMessageCreate
 from contacthop.orchestrator.policy import ChannelDecision, PolicyContext, decide
+from contacthop.orchestrator.voice import get_open_session, queue_speech
 from contacthop.outbound.formatting import email_send_meta
+
+
+async def _maybe_schedule_follow_up(
+    session: AsyncSession,
+    conversation: Conversation,
+    agent_msg: AgentMessageCreate,
+    message: Message,
+) -> None:
+    if agent_msg.follow_up_after is None:
+        return
+    prior_attempts = await session.scalar(
+        select(func.count())
+        .select_from(FollowUp)
+        .where(
+            FollowUp.conversation_id == conversation.id,
+            FollowUp.status == FollowUpStatus.FIRED,
+        )
+    )
+    session.add(
+        FollowUp(
+            conversation_id=conversation.id,
+            message_id=message.id,
+            due_at=utcnow() + timedelta(seconds=agent_msg.follow_up_after),
+            attempt=(prior_attempts or 0) + 1,
+        )
+    )
+    await session.flush()
 
 
 async def send_agent_message(
@@ -38,10 +66,17 @@ async def send_agent_message(
     identities = {i.channel: i for i in contact.identities}
     preferred = contact.preferences.get("preferred_channel")
 
+    # A live call makes voice available regardless of identities — the open
+    # session is the reachable address.
+    open_call = await get_open_session(session, conversation.id)
+    available = set(identities)
+    if open_call is not None:
+        available.add(ChannelType.VOICE)
+
     decision: ChannelDecision = decide(
         PolicyContext(
             current_channel=conversation.current_channel,
-            available_channels=set(identities),
+            available_channels=available,
             configured_channels=set(adapters),
             body_length=len(agent_msg.body),
             urgency=agent_msg.urgency,
@@ -55,6 +90,21 @@ async def send_agent_message(
         raise HTTPException(
             status_code=422, detail=f"no adapter configured for channel '{decision.channel}'"
         )
+
+    if decision.channel is ChannelType.VOICE:
+        # Voice is session-based: speech is queued for the live call loop to speak.
+        if open_call is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "no open voice session; originate a call first via "
+                    "POST /v1/conversations/{id}/call"
+                ),
+            )
+        message = await queue_speech(session, conversation, agent_msg.body, decision.reason)
+        await _maybe_schedule_follow_up(session, conversation, agent_msg, message)
+        return message
+
     identity = identities.get(decision.channel)
     if identity is None:
         raise HTTPException(
@@ -99,24 +149,5 @@ async def send_agent_message(
     )
     session.add(message)
     await session.flush()
-
-    if agent_msg.follow_up_after is not None:
-        prior_attempts = await session.scalar(
-            select(func.count())
-            .select_from(FollowUp)
-            .where(
-                FollowUp.conversation_id == conversation.id,
-                FollowUp.status == FollowUpStatus.FIRED,
-            )
-        )
-        session.add(
-            FollowUp(
-                conversation_id=conversation.id,
-                message_id=message.id,
-                due_at=utcnow() + timedelta(seconds=agent_msg.follow_up_after),
-                attempt=(prior_attempts or 0) + 1,
-            )
-        )
-        await session.flush()
-
+    await _maybe_schedule_follow_up(session, conversation, agent_msg, message)
     return message
