@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+venv
+dist
+build
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+*.db
+tests
+examples
+uv.lock

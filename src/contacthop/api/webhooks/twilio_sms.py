@@ -14,12 +14,23 @@ from contacthop.api.webhooks.twilio_common import require_twilio_signature
 from contacthop.domain.enums import ChannelType, DeliveryStatus, Direction, EventType
 from contacthop.domain.models import Conversation, ConversationEvent, Message
 from contacthop.domain.schemas import AgentNotification, InboundMessage
+from contacthop.orchestrator.consent import ConsentAction, classify
 from contacthop.orchestrator.conversation import (
     inbound_notification,
     notify_agent,
     record_inbound,
     resolve_identity,
 )
+
+
+def _twiml_reply(text: str | None = None) -> Response:
+    from xml.sax.saxutils import escape
+
+    inner = f"<Message>{escape(text)}</Message>" if text else ""
+    return Response(
+        content=f'<?xml version="1.0" encoding="UTF-8"?><Response>{inner}</Response>',
+        media_type="application/xml",
+    )
 
 # Twilio MessageStatus -> our delivery status. Intermediate states are skipped.
 STATUS_MAP = {
@@ -55,6 +66,35 @@ async def inbound_sms(
     )
     message = await record_inbound(session, inbound)
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
+
+    # Consent keywords take effect before the agent ever sees the message.
+    action = classify(inbound.body)
+    if action in (ConsentAction.OPT_OUT, ConsentAction.OPT_IN):
+        identity.opted_out = action is ConsentAction.OPT_OUT
+        session.add(
+            ConversationEvent(
+                conversation_id=message.conversation_id,
+                type=EventType.NOTE,
+                payload={"note": f"contact {action} via keyword", "address": identity.address},
+            )
+        )
+        notification = AgentNotification(
+            event=f"conversation.contact.{action}",
+            conversation_id=message.conversation_id,
+            contact_id=identity.contact_id,
+            payload={"channel": "sms", "address": identity.address},
+        )
+        await session.commit()
+        background.add_task(notify_agent, settings, notification)
+        # STOP: no app-level reply — the carrier sends the mandated confirmation
+        # and blocks further traffic. START: confirm resubscription.
+        return _twiml_reply(
+            settings.sms_opt_in_reply if action is ConsentAction.OPT_IN else None
+        )
+    if action is ConsentAction.HELP:
+        await session.commit()
+        return _twiml_reply(settings.sms_help_reply)
+
     notification = inbound_notification(message, identity.contact_id)
     # Commit before the notification runs: the agent may synchronously call
     # back into the API, which must not collide with this open transaction.
@@ -62,10 +102,7 @@ async def inbound_sms(
     background.add_task(notify_agent, settings, notification)
 
     # Empty TwiML: acknowledge without auto-replying; the agent decides the reply.
-    return Response(
-        content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-        media_type="application/xml",
-    )
+    return _twiml_reply()
 
 
 @router.post("/sms/status")

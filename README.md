@@ -29,6 +29,17 @@ uv sync                    # or: pip install -e .
 
 Optional extras: `contacthop[postgres]` for asyncpg support.
 
+### Docker
+
+A one-command deployment with Postgres, running migrations before the API starts:
+
+```bash
+cp demo.env .env   # configure adapters, credentials, quiet hours, …
+docker compose up
+```
+
+Or just the harness image: `docker build -t contacthop . && docker run -p 8000:8000 contacthop` (defaults to SQLite inside the container — fine for trying it out, use compose for anything real).
+
 ## Quickstart
 
 Run the API server (defaults to SQLite and the zero-credential `console` SMS adapter, which logs outbound messages instead of sending them):
@@ -127,6 +138,7 @@ cp demo.env .env
 | `CONTACTHOP_DEFAULT_TIMEZONE` | `UTC` | IANA timezone the windows are evaluated in when a contact has none |
 | `CONTACTHOP_API_KEYS` | — (open) | Comma-separated Bearer tokens required on the `/v1` management API |
 | `CONTACTHOP_MAX_MESSAGES_PER_HOUR` | `30` | Per-contact outbound cap, rolling hour, all channels; `0` = unlimited |
+| `CONTACTHOP_SMS_HELP_REPLY` / `_SMS_OPT_IN_REPLY` | sensible defaults | Replies to the HELP and START SMS keywords |
 
 ### Send windows (quiet hours)
 
@@ -151,6 +163,10 @@ Set `CONTACTHOP_API_KEYS` and every `/v1` endpoint requires `Authorization: Bear
 
 With `PUBLIC_BASE_URL` set, Twilio delivery receipts flow into `POST /webhooks/twilio/sms/status` and keep `Message.delivery_status` honest (`sent` → `delivered`/`failed`). Failed deliveries are logged as conversation events and pushed to the agent as `conversation.message.failed`, so it can retry on another channel.
 
+### SMS consent (STOP/START/HELP)
+
+Carrier-standard keywords are handled before the agent ever sees the message: **STOP** (and STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT/REVOKE) marks the number opted out, **START** resubscribes with a confirmation, **HELP** gets an informational reply. Opt-out state lives on the channel identity (visible in the contact API) and is enforced in the gateway: explicit sends and calls to an opted-out number return 403, policy-routed messages hop to a channel the contact hasn't opted out of, and escalations skip it. The keyword message itself stays in the transcript for auditability, and the agent is notified via `conversation.contact.opt_out` / `.opt_in` events. Legally required for US texting (TCPA) — do not disable.
+
 ### Database migrations
 
 Schema changes are managed with Alembic, and the migration scripts ship inside the package:
@@ -172,3 +188,7 @@ uv run ruff check .
 
 CI (GitHub Actions) runs ruff, the test suite on Python 3.11–3.13, and a package build on every push and pull request.
 
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 Collin Paran.

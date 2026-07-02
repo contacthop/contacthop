@@ -31,3 +31,10 @@ jobs:
 
       - name: Build distributions
         run: uv build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t contacthop .

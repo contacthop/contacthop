@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, TypeVar
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, Uuid, false
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -70,6 +70,9 @@ class ChannelIdentity(Base):
     # E.164 phone number for sms/voice, email address for email.
     address: Mapped[str] = mapped_column(String(320), index=True)
     verified: Mapped[bool] = mapped_column(default=False)
+    # Consent: set by STOP/START keywords (SMS) or unsubscribe flows. Opted-out
+    # identities are unreachable — enforced in the gateway backstop.
+    opted_out: Mapped[bool] = mapped_column(default=False, server_default=false())
 
     contact: Mapped[Contact] = relationship(back_populates="identities")
 

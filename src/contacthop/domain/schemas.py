@@ -29,6 +29,7 @@ class ChannelIdentityRead(ChannelIdentityCreate):
 
     id: uuid.UUID
     verified: bool
+    opted_out: bool
 
 
 class ContactCreate(BaseModel):

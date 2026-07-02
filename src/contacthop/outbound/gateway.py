@@ -74,9 +74,9 @@ async def send_agent_message(
     await enforce_rate_limit(session, settings, contact)
 
     # A live call makes voice available regardless of identities — the open
-    # session is the reachable address.
+    # session is the reachable address. Opted-out identities are unreachable.
     open_call = await get_open_session(session, conversation.id)
-    available = set(identities)
+    available = {ch for ch, ident in identities.items() if not ident.opted_out}
     if open_call is not None:
         available.add(ChannelType.VOICE)
 
@@ -144,6 +144,11 @@ async def send_agent_message(
         raise HTTPException(
             status_code=422,
             detail=f"contact has no {decision.channel} identity",
+        )
+    if identity.opted_out:
+        raise HTTPException(
+            status_code=403,
+            detail=f"contact has opted out of {decision.channel}; sending is not permitted",
         )
 
     send_meta: dict[str, Any] | None = None

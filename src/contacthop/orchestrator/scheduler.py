@@ -67,7 +67,9 @@ class FollowUpScheduler:
                 if conversation is None:
                     follow_up.status = FollowUpStatus.CANCELLED
                     continue
-                available = {i.channel for i in conversation.contact.identities}
+                available = {
+                    i.channel for i in conversation.contact.identities if not i.opted_out
+                }
                 # Suggest only channels currently inside their send window.
                 open_now = open_channels(
                     self.settings, conversation.contact, self.configured_channels

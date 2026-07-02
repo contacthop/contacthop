@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     # Contacts can override via preferences["max_messages_per_hour"].
     max_messages_per_hour: int = 30
 
+    # Replies to the HELP and START SMS keywords. STOP gets no app-level reply —
+    # the carrier/Twilio sends the mandated confirmation and blocks the number.
+    sms_help_reply: str = (
+        "This number is operated by an AI assistant. "
+        "Reply STOP to unsubscribe, START to resume."
+    )
+    sms_opt_in_reply: str = "You are resubscribed. Reply STOP to unsubscribe at any time."
+
     # How often the in-process scheduler checks for due follow-ups.
     follow_up_poll_interval: float = 5.0
 

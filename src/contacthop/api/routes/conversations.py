@@ -173,6 +173,11 @@ async def originate_call(
     identity = identities.get(ChannelType.VOICE) or identities.get(ChannelType.SMS)
     if identity is None:
         raise HTTPException(status_code=422, detail="contact has no phone number identity")
+    if identity.opted_out:
+        raise HTTPException(
+            status_code=403,
+            detail="contact has opted out of this number; calling is not permitted",
+        )
 
     base = settings.public_base_url or str(request.base_url).rstrip("/")
     answer_url = f"{base}/webhooks/twilio/voice/answer?conversation_id={conversation.id}"

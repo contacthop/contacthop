@@ -1,0 +1,48 @@
+# One-command ContactHop deployment: Postgres + migrations + the API.
+#   docker compose up
+# Configure via .env in this directory (cp demo.env .env) — compose passes
+# CONTACTHOP_* variables through to the containers.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: contacthop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-contacthop}
+      POSTGRES_DB: contacthop
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contacthop"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: .
+    command: ["contacthop", "migrate"]
+    environment: &app_env
+      CONTACTHOP_DATABASE_URL: postgresql+asyncpg://contacthop:${POSTGRES_PASSWORD:-contacthop}@db/contacthop
+      CONTACTHOP_AUTO_CREATE_TABLES: "false"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    ports:
+      - "${CONTACTHOP_PORT:-8000}:8000"
+    environment: *app_env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
