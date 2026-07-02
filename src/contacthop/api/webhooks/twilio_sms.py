@@ -1,0 +1,54 @@
+"""Inbound SMS webhook (Twilio Messaging).
+
+Verifies the provider signature when Twilio credentials are configured, normalizes
+the payload into an InboundMessage, records it, and notifies the agent runtime.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+
+from contacthop.api.deps import SessionDep, SettingsDep
+from contacthop.channels.sms.twilio import verify_twilio_signature
+from contacthop.domain.enums import ChannelType
+from contacthop.domain.schemas import InboundMessage
+from contacthop.orchestrator.conversation import notify_agent, record_inbound, resolve_identity
+
+router = APIRouter(prefix="/webhooks/twilio", tags=["webhooks"])
+
+
+@router.post("/sms")
+async def inbound_sms(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    background: BackgroundTasks,
+) -> Response:
+    form = {k: str(v) for k, v in (await request.form()).items()}
+
+    if settings.twilio_auth_token:
+        signature = request.headers.get("X-Twilio-Signature", "")
+        base = settings.public_base_url or str(request.base_url).rstrip("/")
+        url = base + request.url.path
+        if not verify_twilio_signature(settings.twilio_auth_token, url, form, signature):
+            raise HTTPException(status_code=403, detail="invalid Twilio signature")
+
+    if not form.get("From") or "Body" not in form:
+        raise HTTPException(status_code=400, detail="missing From or Body")
+
+    inbound = InboundMessage(
+        channel=ChannelType.SMS,
+        from_address=form["From"],
+        to_address=form.get("To", ""),
+        body=form["Body"],
+        provider_message_id=form.get("MessageSid"),
+    )
+    message = await record_inbound(session, inbound)
+    identity = await resolve_identity(session, inbound.channel, inbound.from_address)
+    background.add_task(notify_agent, settings, message, identity.contact_id)
+
+    # Empty TwiML: acknowledge without auto-replying; the agent decides the reply.
+    return Response(
+        content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        media_type="application/xml",
+    )
