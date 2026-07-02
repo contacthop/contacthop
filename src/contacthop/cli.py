@@ -18,7 +18,12 @@ def main(argv: list[str] | None = None) -> None:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--reload", action="store_true")
 
-    sub.add_parser("init-db", help="create database tables")
+    sub.add_parser("init-db", help="create database tables directly (dev; prefer migrate)")
+
+    migrate = sub.add_parser("migrate", help="apply Alembic migrations")
+    migrate.add_argument(
+        "revision", nargs="?", default="head", help="target revision (default: head)"
+    )
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
@@ -33,6 +38,8 @@ def main(argv: list[str] | None = None) -> None:
         )
     elif args.command == "init-db":
         asyncio.run(_init_db())
+    elif args.command == "migrate":
+        _migrate(args.revision)
 
 
 async def _init_db() -> None:
@@ -44,6 +51,15 @@ async def _init_db() -> None:
     await db.create_all()
     await db.dispose()
     print(f"tables created in {settings.database_url}")
+
+
+def _migrate(revision: str) -> None:
+    from contacthop.config import Settings
+    from contacthop.db.migrate import upgrade
+
+    settings = Settings()
+    upgrade(settings.database_url, revision)
+    print(f"migrated {settings.database_url} to {revision}")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite+aiosqlite:///contacthop.db"
+    # Create missing tables at startup (dev convenience). Set false in
+    # production and manage the schema with `contacthop migrate` instead.
+    auto_create_tables: bool = True
 
     # "console" logs outbound messages instead of sending them — zero-credential dev mode.
     sms_adapter: Literal["console", "twilio"] = "console"

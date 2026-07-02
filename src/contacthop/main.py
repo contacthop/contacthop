@@ -100,7 +100,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        await db.create_all()
+        if settings.auto_create_tables:
+            await db.create_all()
         await scheduler.start()
         logger.info(
             "ContactHop %s ready (sms: %s, email: %s)",
