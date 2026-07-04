@@ -38,3 +38,44 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build -t contacthop .
+
+  # Proves the production path: migrate a real Postgres, boot with
+  # auto_create_tables=false, and exercise the write path.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: contacthop
+          POSTGRES_PASSWORD: contacthop
+          POSTGRES_DB: contacthop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U contacthop"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CONTACTHOP_DATABASE_URL: postgresql+asyncpg://contacthop:contacthop@localhost:5432/contacthop
+      CONTACTHOP_AUTO_CREATE_TABLES: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra postgres
+      - name: Run migrations against Postgres
+        run: uv run contacthop migrate
+      - name: Boot and smoke test
+        run: |
+          uv run contacthop serve --port 8000 &
+          for i in $(seq 1 20); do curl -sf localhost:8000/health && break; sleep 1; done
+          curl -sf localhost:8000/v1/contacts \
+            -H 'content-type: application/json' \
+            -d '{"identities":[{"channel":"sms","address":"+15550001111"}]}'
+          curl -sf -X POST localhost:8000/webhooks/twilio/sms \
+            -d 'From=%2B15550001111&To=%2B15550000000&Body=hello'
