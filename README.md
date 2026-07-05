@@ -23,7 +23,7 @@ Designed for the next generation of personal AI systems, autonomous operators, e
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
 
-**Contents:** [Installation](#installation) · [Quickstart](#quickstart) · [Python SDK](#python-sdk) · [HTTP API](#http-api-at-a-glance) · [Configuration](#configuration) · [Deploying to production](#deploying-to-production) · [Development](#development) · [License](#license)
+**Contents:** [Installation](#installation) · [Quickstart](#quickstart) · [Command center](#command-center) · [Python SDK](#python-sdk) · [HTTP API](#http-api-at-a-glance) · [Configuration](#configuration) · [Deploying to production](#deploying-to-production) · [Development](#development) · [License](#license)
 
 ## Installation
 
@@ -101,6 +101,10 @@ curl -s localhost:8000/v1/conversations/<id>/call \
 ```
 
 While the call is open, agent messages to the conversation are queued and spoken into the call; the human's speech comes back as inbound voice messages in the same transcript. v1 voice uses Twilio's built-in speech recognition (`<Gather input="speech">`) and TTS (`<Say>`) — no separate speech providers needed. The Twilio voice adapter requires `CONTACTHOP_PUBLIC_BASE_URL` so Twilio can reach the call webhooks; a streaming Media Streams pipeline (lower latency, barge-in) is the planned upgrade path.
+
+## Command center
+
+Every deployment ships an operational dashboard at **`/dashboard`** — no separate frontend to deploy, no build step, no external assets. It shows contacts and conversations at a glance, and for each conversation the unified timeline: SMS, email, and voice turns interleaved with channel-switch, escalation, and consent events, plus live delivery status. You can also reply as the agent directly from the page (channel picked by the policy engine, or forced). Data flows through the same authenticated `/v1` API the SDK uses — enter your API key in the header field when one is configured. Auto-refreshes every 5 seconds; light and dark theme follow the system.
 
 ## Python SDK
 

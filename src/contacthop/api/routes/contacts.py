@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import select
 
 from contacthop.api.deps import SessionDep
 from contacthop.domain.models import ChannelIdentity, Contact
@@ -26,6 +27,18 @@ async def create_contact(payload: ContactCreate, session: SessionDep) -> Contact
     session.add(contact)
     await session.flush()
     return contact
+
+
+@router.get("", response_model=list[ContactRead])
+async def list_contacts(
+    session: SessionDep,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[Contact]:
+    result = await session.execute(
+        select(Contact).order_by(Contact.created_at.desc(), Contact.id).limit(limit).offset(offset)
+    )
+    return list(result.scalars())
 
 
 @router.get("/{contact_id}", response_model=ContactRead)

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from contacthop.api.deps import AdaptersDep, SessionDep, SettingsDep
 from contacthop.channels.base import ChannelSendError, VoiceAdapter
-from contacthop.domain.enums import ChannelType, EventType
+from contacthop.domain.enums import ChannelType, ConversationStatus, EventType
 from contacthop.domain.models import (
     ChannelSession,
     Contact,
@@ -47,6 +47,20 @@ async def _get_conversation(session: AsyncSession, conversation_id: uuid.UUID) -
     if conversation is None:
         raise HTTPException(status_code=404, detail="conversation not found")
     return conversation
+
+
+@router.get("", response_model=list[ConversationRead])
+async def list_conversations(
+    session: SessionDep,
+    status: ConversationStatus | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[Conversation]:
+    query = select(Conversation).order_by(Conversation.created_at.desc(), Conversation.id)
+    if status is not None:
+        query = query.where(Conversation.status == status)
+    result = await session.execute(query.limit(limit).offset(offset))
+    return list(result.scalars())
 
 
 @router.post("", response_model=ConversationRead, status_code=201)
