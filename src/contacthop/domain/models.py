@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, TypeVar
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, Uuid, false
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, Uuid, false
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -63,6 +63,11 @@ class Contact(Base):
 
 class ChannelIdentity(Base):
     __tablename__ = "channel_identities"
+    # An address belongs to exactly one contact — identity resolution on
+    # inbound messages depends on this invariant.
+    __table_args__ = (
+        UniqueConstraint("channel", "address", name="uq_channel_identity_address"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contacts.id"), index=True)

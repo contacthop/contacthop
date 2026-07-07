@@ -18,8 +18,33 @@ from contacthop.memory.stats import channel_responsiveness
 router = APIRouter(prefix="/v1/contacts", tags=["contacts"])
 
 
+async def _reject_taken_addresses(
+    session: SessionDep, identities: list[ChannelIdentityCreate]
+) -> None:
+    """An address belongs to exactly one contact — inbound identity resolution
+    depends on it (DB-enforced too; this yields a friendly 409 instead)."""
+    for identity in identities:
+        existing = await session.execute(
+            select(ChannelIdentity).where(
+                ChannelIdentity.channel == identity.channel,
+                ChannelIdentity.address == identity.address,
+            )
+        )
+        if existing.scalars().first() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{identity.channel} address {identity.address!r} is already "
+                "registered to a contact",
+            )
+
+
 @router.post("", response_model=ContactRead, status_code=201)
 async def create_contact(payload: ContactCreate, session: SessionDep) -> Contact:
+    unique_in_payload = {(i.channel, i.address) for i in payload.identities}
+    if len(unique_in_payload) != len(payload.identities):
+        raise HTTPException(status_code=422, detail="duplicate identities in payload")
+    await _reject_taken_addresses(session, payload.identities)
+
     contact = Contact(display_name=payload.display_name, preferences=payload.preferences)
     contact.identities = [
         ChannelIdentity(channel=i.channel, address=i.address) for i in payload.identities
@@ -69,11 +94,7 @@ async def add_identity(
     contact = await session.get(Contact, contact_id)
     if contact is None:
         raise HTTPException(status_code=404, detail="contact not found")
-    if any(
-        i.channel == payload.channel and i.address == payload.address
-        for i in contact.identities
-    ):
-        raise HTTPException(status_code=409, detail="identity already exists on this contact")
+    await _reject_taken_addresses(session, [payload])
     contact.identities.append(
         ChannelIdentity(channel=payload.channel, address=payload.address)
     )

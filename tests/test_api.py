@@ -115,3 +115,44 @@ def test_inbound_sms_from_unknown_sender_creates_provisional_contact(
 def test_inbound_missing_fields_rejected(client: TestClient) -> None:
     resp = client.post("/webhooks/twilio/sms", data={"Body": "no sender"})
     assert resp.status_code == 400
+
+
+def test_address_belongs_to_one_contact(client: TestClient) -> None:
+    """Regression: duplicate (channel, address) across contacts made every
+    inbound message from that address a 500 (MultipleResultsFound)."""
+    make_contact(client)
+
+    dup = client.post(
+        "/v1/contacts",
+        json={"identities": [{"channel": "sms", "address": "+15551234567"}]},
+    )
+    assert dup.status_code == 409
+    assert "already registered" in dup.json()["detail"]
+
+    other = client.post(
+        "/v1/contacts",
+        json={"identities": [{"channel": "sms", "address": "+15550009911"}]},
+    ).json()
+    steal = client.post(
+        f"/v1/contacts/{other['id']}/identities",
+        json={"channel": "sms", "address": "+15551234567"},
+    )
+    assert steal.status_code == 409
+
+    same_payload_dup = client.post(
+        "/v1/contacts",
+        json={
+            "identities": [
+                {"channel": "sms", "address": "+15550009922"},
+                {"channel": "sms", "address": "+15550009922"},
+            ]
+        },
+    )
+    assert same_payload_dup.status_code == 422
+
+    # inbound from the original address still resolves cleanly
+    resp = client.post(
+        "/webhooks/twilio/sms",
+        data={"From": "+15551234567", "To": "+15550000000", "Body": "still works"},
+    )
+    assert resp.status_code == 200

@@ -40,7 +40,9 @@ async def resolve_identity(
             ChannelIdentity.channel == channel, ChannelIdentity.address == address
         )
     )
-    identity = result.scalar_one_or_none()
+    # Uniqueness of (channel, address) is DB-enforced; first() stays resilient
+    # on databases that predate the constraint.
+    identity = result.scalars().first()
     if identity is not None:
         return identity
 

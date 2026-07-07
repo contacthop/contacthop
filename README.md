@@ -332,6 +332,26 @@ Run an SDK `Agent` app (see [Python SDK](#python-sdk)) anywhere the harness can 
 
 **Local development against real providers:** expose your dev server with a tunnel (`ngrok http 8000`, `cloudflared tunnel`), set `CONTACTHOP_PUBLIC_BASE_URL` to the tunnel URL, and point the Twilio number's SMS webhook at it.
 
+### Footprint
+
+ContactHop is deliberately small — the heavy lifting (telephony, speech, email delivery) lives in external providers, so the local install is just an orchestration layer (measured on v0.1.0, Linux x86-64):
+
+| What | Size |
+|---|---|
+| Application wheel | ~80 KB (≈4k lines of Python) |
+| Installed dependencies (incl. `postgres` + `falkordb` extras) | ~64 MB |
+| Docker image | ~190 MB (`python:3.12-slim` + venv) |
+| Runtime memory | ~75 MB RSS, one process (idle ≈ under load) |
+| SQLite database | KB-scale (50 contacts / 100 messages ≈ 170 KB) |
+
+Deployment tiers, smallest first:
+
+1. **Single process** — `pip install contacthop && contacthop serve`. SQLite + in-memory contact memory: zero services, one ~75 MB process. Fine for one agent and modest volume; fits the smallest VPS or a free-tier container.
+2. **Compose stack** — app + Postgres + FalkorDB (≈3 containers, roughly 400–600 MB RAM total). Durable everything; this is the recommended production shape.
+3. **Horizontal scale** — the API is stateless (all state in Postgres/FalkorDB), so replicas behind a load balancer work, with one caveat: run the follow-up scheduler on a single instance (set a long `CONTACTHOP_FOLLOW_UP_POLL_INTERVAL` on the others, or keep one worker replica) until the queue moves to a shared broker — concurrent sweeps could double-fire escalations.
+
+Everything else is outbound HTTPS to providers (Twilio, your SMTP relay) and your agent's webhook; the only *inbound* requirement is one public HTTPS endpoint for the provider webhooks.
+
 ## Development
 
 ```bash
