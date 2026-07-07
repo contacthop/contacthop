@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     smtp_from_address: str | None = None
     smtp_starttls: bool = True
 
+    # Durable contact memory: "inmemory" is functional but process-local (dev);
+    # "falkordb" is a knowledge graph (requires the contacthop[falkordb] extra).
+    memory_store: Literal["none", "inmemory", "falkordb"] = "inmemory"
+    falkordb_host: str = "localhost"
+    falkordb_port: int = 6379
+    falkordb_username: str | None = None
+    falkordb_password: str | None = None
+    falkordb_graph: str = "contacthop"
+
     # Shared secret required (as X-ContactHop-Token) on the generic inbound email webhook.
     email_inbound_token: str | None = None
 

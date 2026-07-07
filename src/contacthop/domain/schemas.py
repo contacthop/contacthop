@@ -142,6 +142,25 @@ class InboundMessage(BaseModel):
     channel_meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryFactCreate(BaseModel):
+    """Something the agent decided to remember about a contact."""
+
+    text: str = Field(min_length=1, max_length=2000)
+    topic: str | None = Field(default=None, max_length=100)
+    conversation_id: uuid.UUID | None = None
+
+
+class MemoryFact(MemoryFactCreate):
+    id: uuid.UUID
+    created_at: datetime
+
+
+class ContactMemoryFact(MemoryFact):
+    """A fact with its owner — returned by cross-contact topic queries."""
+
+    contact_id: uuid.UUID
+
+
 class ConversationContextRead(BaseModel):
     """What an agent needs to compose its next turn: goal, digest, recent verbatim."""
 
@@ -150,6 +169,8 @@ class ConversationContextRead(BaseModel):
     current_channel: ChannelType
     summary: str
     recent_messages: list[MessageRead]
+    # Durable facts about the contact from the memory store (empty when disabled).
+    memory: list[MemoryFact] = Field(default_factory=list)
 
 
 class ContactStatsRead(BaseModel):

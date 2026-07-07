@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI
 
 from contacthop import __version__
 from contacthop.api.deps import require_api_key
-from contacthop.api.routes import contacts, conversations, dashboard
+from contacthop.api.routes import contacts, conversations, dashboard, memory
 from contacthop.api.webhooks import email_inbound, twilio_sms, twilio_voice
 from contacthop.channels.base import ChannelAdapter
 from contacthop.channels.email.console import ConsoleEmailAdapter
@@ -22,6 +22,12 @@ from contacthop.channels.voice.twilio_call import TwilioVoiceAdapter
 from contacthop.config import Settings
 from contacthop.db.session import Database
 from contacthop.domain.enums import ChannelType
+from contacthop.memory.store import (
+    DisabledMemoryStore,
+    FalkorMemoryStore,
+    InMemoryMemoryStore,
+    MemoryStore,
+)
 from contacthop.orchestrator.scheduler import FollowUpScheduler
 
 logger = logging.getLogger("contacthop")
@@ -92,11 +98,26 @@ def build_adapters(settings: Settings) -> dict[ChannelType, ChannelAdapter]:
     return adapters
 
 
+def build_memory_store(settings: Settings) -> MemoryStore:
+    if settings.memory_store == "falkordb":
+        return FalkorMemoryStore(
+            host=settings.falkordb_host,
+            port=settings.falkordb_port,
+            username=settings.falkordb_username,
+            password=settings.falkordb_password,
+            graph_name=settings.falkordb_graph,
+        )
+    if settings.memory_store == "inmemory":
+        return InMemoryMemoryStore()
+    return DisabledMemoryStore()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     db = Database(settings.database_url)
     adapters = build_adapters(settings)
     scheduler = FollowUpScheduler(db, settings, set(adapters))
+    memory_store = build_memory_store(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -118,10 +139,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = db
     app.state.adapters = adapters
     app.state.scheduler = scheduler
+    app.state.memory = memory_store
 
     protected = [Depends(require_api_key)]
     app.include_router(contacts.router, dependencies=protected)
     app.include_router(conversations.router, dependencies=protected)
+    app.include_router(memory.router, dependencies=protected)
     app.include_router(dashboard.router)
     app.include_router(twilio_sms.router)
     app.include_router(twilio_voice.router)

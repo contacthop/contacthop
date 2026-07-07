@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from contacthop.api.deps import AdaptersDep, SessionDep, SettingsDep
+from contacthop.api.deps import AdaptersDep, MemoryDep, SessionDep, SettingsDep
 from contacthop.channels.base import ChannelSendError, VoiceAdapter
 from contacthop.domain.enums import ChannelType, ConversationStatus, EventType
 from contacthop.domain.models import (
@@ -94,9 +94,13 @@ async def get_transcript(conversation_id: uuid.UUID, session: SessionDep) -> lis
 
 @router.get("/{conversation_id}/context", response_model=ConversationContextRead)
 async def get_context(
-    conversation_id: uuid.UUID, session: SessionDep, recent: int = 20
+    conversation_id: uuid.UUID,
+    session: SessionDep,
+    memory: MemoryDep,
+    recent: int = 20,
 ) -> ConversationContextRead:
-    """Prompt-ready context: digest of older history + the recent window verbatim."""
+    """Prompt-ready context: digest of older history, the recent window verbatim,
+    and remembered facts about the contact."""
     conversation = await _get_conversation(session, conversation_id)
     summary, recent_messages = await build_context(session, conversation, recent_window=recent)
     return ConversationContextRead(
@@ -105,6 +109,7 @@ async def get_context(
         current_channel=conversation.current_channel,
         summary=summary,
         recent_messages=[MessageRead.model_validate(m) for m in recent_messages],
+        memory=await memory.recall(conversation.contact_id, limit=25),
     )
 
 

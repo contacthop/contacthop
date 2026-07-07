@@ -9,7 +9,7 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src ./src
 RUN uv venv /opt/venv && \
-    VIRTUAL_ENV=/opt/venv uv pip install --no-cache ".[postgres]"
+    VIRTUAL_ENV=/opt/venv uv pip install --no-cache ".[postgres,falkordb]"
 
 FROM python:3.12-slim
 

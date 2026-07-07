@@ -36,6 +36,7 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["asyncpg>=0.29"]
+falkordb = ["falkordb>=1.0"]
 
 [project.scripts]
 contacthop = "contacthop.cli:main"

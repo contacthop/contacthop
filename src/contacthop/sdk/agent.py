@@ -20,6 +20,7 @@ from contacthop.domain.schemas import (
     ChannelSessionRead,
     ConversationContextRead,
     ConversationRead,
+    MemoryFact,
     MessageRead,
 )
 from contacthop.sdk.client import ContactHopClient
@@ -66,6 +67,15 @@ class ConversationContext:
 
     async def context(self, recent: int = 20) -> ConversationContextRead:
         return await self.client.context(self.conversation_id, recent)
+
+    async def remember(self, text: str, topic: str | None = None) -> MemoryFact:
+        """Store a durable fact about this conversation's contact."""
+        return await self.client.remember(
+            self.contact_id, text, topic=topic, conversation_id=self.conversation_id
+        )
+
+    async def recall(self, topic: str | None = None) -> list[MemoryFact]:
+        return await self.client.recall(self.contact_id, topic=topic)
 
 
 MessageHandler = Callable[[ConversationContext, MessageRead], Awaitable[None]]

@@ -39,6 +39,32 @@ jobs:
       - name: Build image
         run: docker build -t contacthop .
 
+  # Graph-memory integration: the FalkorDB store against a real instance.
+  falkordb:
+    runs-on: ubuntu-latest
+    services:
+      falkordb:
+        image: falkordb/falkordb:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CONTACTHOP_TEST_FALKORDB_HOST: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --extra falkordb
+      - name: Run FalkorDB integration tests
+        run: uv run pytest tests/test_falkordb.py -q
+
   # Proves the production path: migrate a real Postgres, boot with
   # auto_create_tables=false, and exercise the write path.
   postgres:

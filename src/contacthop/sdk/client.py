@@ -11,11 +11,13 @@ import httpx
 from contacthop.domain.enums import ChannelType, Urgency
 from contacthop.domain.schemas import (
     ChannelSessionRead,
+    ContactMemoryFact,
     ContactRead,
     ContactStatsRead,
     ConversationContextRead,
     ConversationRead,
     EventRead,
+    MemoryFact,
     MessageRead,
 )
 
@@ -65,6 +67,8 @@ class ContactHopClient:
             except ValueError:
                 detail = resp.text
             raise ContactHopError(resp.status_code, str(detail))
+        if resp.status_code == 204 or not resp.content:
+            return None
         return resp.json()
 
     # -- contacts ----------------------------------------------------------
@@ -148,6 +152,42 @@ class ContactHopClient:
         return ContactStatsRead.model_validate(
             await self._request("GET", f"/v1/contacts/{contact_id}/stats")
         )
+
+    # -- memory ---------------------------------------------------------------
+
+    async def remember(
+        self,
+        contact_id: uuid.UUID | str,
+        text: str,
+        topic: str | None = None,
+        conversation_id: uuid.UUID | str | None = None,
+    ) -> MemoryFact:
+        return MemoryFact.model_validate(
+            await self._request(
+                "POST",
+                f"/v1/contacts/{contact_id}/memory",
+                {
+                    "text": text,
+                    "topic": topic,
+                    "conversation_id": str(conversation_id) if conversation_id else None,
+                },
+            )
+        )
+
+    async def recall(
+        self, contact_id: uuid.UUID | str, topic: str | None = None, limit: int = 50
+    ) -> list[MemoryFact]:
+        path = f"/v1/contacts/{contact_id}/memory?limit={limit}"
+        if topic:
+            path += f"&topic={topic}"
+        return [MemoryFact.model_validate(f) for f in await self._request("GET", path)]
+
+    async def forget(self, contact_id: uuid.UUID | str, fact_id: uuid.UUID | str) -> None:
+        await self._request("DELETE", f"/v1/contacts/{contact_id}/memory/{fact_id}")
+
+    async def recall_topic(self, topic: str, limit: int = 100) -> list[ContactMemoryFact]:
+        data = await self._request("GET", f"/v1/memory/topics/{topic}?limit={limit}")
+        return [ContactMemoryFact.model_validate(f) for f in data]
 
     # -- messaging ----------------------------------------------------------
 

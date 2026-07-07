@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from contacthop.channels.base import ChannelAdapter
 from contacthop.config import Settings
 from contacthop.domain.enums import ChannelType
+from contacthop.memory.store import MemoryStore
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -26,6 +27,11 @@ def get_settings(request: Request) -> Settings:
 def get_adapters(request: Request) -> dict[ChannelType, ChannelAdapter]:
     adapters: dict[ChannelType, ChannelAdapter] = request.app.state.adapters
     return adapters
+
+
+def get_memory(request: Request) -> MemoryStore:
+    memory: MemoryStore = request.app.state.memory
+    return memory
 
 
 def require_api_key(request: Request) -> None:
@@ -47,3 +53,4 @@ def require_api_key(request: Request) -> None:
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 AdaptersDep = Annotated[dict[ChannelType, ChannelAdapter], Depends(get_adapters)]
+MemoryDep = Annotated[MemoryStore, Depends(get_memory)]

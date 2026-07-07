@@ -23,7 +23,7 @@ Designed for the next generation of personal AI systems, autonomous operators, e
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
 
-**Contents:** [Installation](#installation) · [Quickstart](#quickstart) · [Command center](#command-center) · [Python SDK](#python-sdk) · [HTTP API](#http-api-at-a-glance) · [Configuration](#configuration) · [Deploying to production](#deploying-to-production) · [Development](#development) · [License](#license)
+**Contents:** [Installation](#installation) · [Quickstart](#quickstart) · [Command center](#command-center) · [Python SDK](#python-sdk) · [Memory](#contact-memory-graph-backed) · [HTTP API](#http-api-at-a-glance) · [Configuration](#configuration) · [Deploying to production](#deploying-to-production) · [Development](#development) · [License](#license)
 
 ## Installation
 
@@ -131,6 +131,27 @@ app = hop.app  # run: uvicorn my_agent:app --port 9000
 Point `CONTACTHOP_AGENT_WEBHOOK_URL=http://127.0.0.1:9000/` at it and every inbound message — SMS, email, or spoken voice turn — lands in `handle`. The client is also usable standalone (`ContactHopClient`) for scripting: `create_contact`, `create_conversation`, `send`, `call`, `switch`, `transcript`, `context`, `stats`. See `examples/echo_agent.py`.
 
 The policy engine also learns per-contact responsiveness: `GET /v1/contacts/<id>/stats` exposes median reply latency per channel, and high-urgency messages automatically use the contact's fastest-responding channel once data exists.
+
+## Contact memory (graph-backed)
+
+Agents can remember durable facts about contacts — and get them back automatically in every conversation's context:
+
+```python
+@hop.on_message
+async def handle(ctx, message):
+    await ctx.remember("prefers 4pm meetings", topic="scheduling")
+    context = await ctx.context()   # context.memory now carries the contact's facts
+```
+
+The harness never decides *what* to remember — agents do, via `POST /v1/contacts/<id>/memory` (or `ctx.remember` / `client.recall` in the SDK). Facts carry an optional topic and conversation provenance, and `GET /v1/memory/topics/<topic>` traverses a topic **across contacts**.
+
+Backends (`CONTACTHOP_MEMORY_STORE`):
+
+| Backend | What it is |
+|---|---|
+| `inmemory` (default) | Fully functional, process-local — dev/demo, lost on restart |
+| `falkordb` | A knowledge graph in [FalkorDB](https://falkordb.com): `(Contact)-[:KNOWS]->(Fact)-[:ABOUT]->(Topic)` with `(Fact)-[:FROM]->(Conversation)` provenance. Install `contacthop[falkordb]`; `docker compose up` runs FalkorDB and uses it automatically. The graph shape is what enables cross-contact topic traversal and future relationship queries |
+| `none` | Memory disabled: writes are rejected, recalls are empty |
 
 ## HTTP API at a glance
 
