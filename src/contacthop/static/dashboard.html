@@ -4,8 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ContactHop — Command Center</title>
+<script>
+  /* Theme before first paint: dark by default; the header toggle persists a choice. */
+  document.documentElement.dataset.theme =
+    localStorage.getItem("contacthop_theme") || "dark";
+</script>
 <style>
   :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
+    --hairline: rgba(255,255,255,0.10); --grid: #2c2c2a;
+    --ch-sms: #3987e5; --ch-email: #199e70; --ch-voice: #c98500;
+    --good: #0ca30c; --critical: #e66767;
+    --wash: rgba(255,255,255,0.05); --wash-2: rgba(255,255,255,0.09);
+    --sel: rgba(57,135,229,0.14);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
     --page: #f9f9f7; --surface: #fcfcfb;
     --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
     --hairline: rgba(11,11,11,0.10); --grid: #e1e0d9;
@@ -13,17 +29,6 @@
     --good: #0ca30c; --critical: #d03b3b;
     --wash: rgba(11,11,11,0.04); --wash-2: rgba(11,11,11,0.07);
     --sel: rgba(42,120,214,0.08);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --page: #0d0d0d; --surface: #1a1a19;
-      --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
-      --hairline: rgba(255,255,255,0.10); --grid: #2c2c2a;
-      --ch-sms: #3987e5; --ch-email: #199e70; --ch-voice: #c98500;
-      --good: #0ca30c; --critical: #e66767;
-      --wash: rgba(255,255,255,0.05); --wash-2: rgba(255,255,255,0.09);
-      --sel: rgba(57,135,229,0.14);
-    }
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
@@ -260,6 +265,7 @@
   <span class="spacer"></span>
   <span id="health"><span class="dot"></span><span id="healthtext">connecting…</span></span>
   <a href="/docs" target="_blank" rel="noopener">API docs</a>
+  <button id="themebtn" class="ghost" title="Toggle light/dark theme" aria-label="Toggle theme">☀</button>
   <input id="key" type="password" placeholder="API key" autocomplete="off" aria-label="API key">
 </header>
 <div id="banner" role="alert"></div>
@@ -327,6 +333,17 @@ keyInput.addEventListener("change", () => {
   localStorage.setItem("contacthop_key", keyInput.value);
   refresh();
 });
+
+/* Theme: dark by default, light on request, persisted per browser. */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("contacthop_theme", theme);
+  $("themebtn").textContent = theme === "dark" ? "☀" : "☾";
+  $("themebtn").title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+}
+applyTheme(document.documentElement.dataset.theme || "dark");
+$("themebtn").addEventListener("click", () =>
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({
