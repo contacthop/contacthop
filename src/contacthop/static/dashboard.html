@@ -11,7 +11,8 @@
     --hairline: rgba(11,11,11,0.10); --grid: #e1e0d9;
     --ch-sms: #2a78d6; --ch-email: #1baf7a; --ch-voice: #eda100;
     --good: #0ca30c; --critical: #d03b3b;
-    --wash: rgba(11,11,11,0.04);
+    --wash: rgba(11,11,11,0.04); --wash-2: rgba(11,11,11,0.07);
+    --sel: rgba(42,120,214,0.08);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -19,122 +20,289 @@
       --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #898781;
       --hairline: rgba(255,255,255,0.10); --grid: #2c2c2a;
       --ch-sms: #3987e5; --ch-email: #199e70; --ch-voice: #c98500;
-      --good: #0ca30c; --critical: #d03b3b;
-      --wash: rgba(255,255,255,0.06);
+      --good: #0ca30c; --critical: #e66767;
+      --wash: rgba(255,255,255,0.05); --wash-2: rgba(255,255,255,0.09);
+      --sel: rgba(57,135,229,0.14);
     }
   }
   * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
   body {
-    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--page); color: var(--ink); height: 100vh;
-    display: flex; flex-direction: column;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page); color: var(--ink);
+    display: flex; flex-direction: column; overflow: hidden;
   }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--ch-sms); outline-offset: 1px; border-radius: 6px; }
+
+  /* ── header ─────────────────────────────────────────────── */
   header {
-    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
-    border-bottom: 1px solid var(--hairline); background: var(--surface);
+    display: flex; align-items: center; gap: 10px; padding: 0 18px; height: 52px;
+    border-bottom: 1px solid var(--hairline); background: var(--surface); flex-shrink: 0;
   }
-  header h1 { font-size: 15px; font-weight: 650; }
-  header .sub { color: var(--ink-3); font-size: 12px; }
+  .mark {
+    width: 24px; height: 24px; border-radius: 7px; flex-shrink: 0;
+    background: conic-gradient(from 40deg, var(--ch-sms), var(--ch-email), var(--ch-voice), var(--ch-sms));
+    mask: radial-gradient(circle at center, transparent 34%, black 36%);
+    -webkit-mask: radial-gradient(circle at center, transparent 34%, black 36%);
+  }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  header .sub {
+    color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    margin-top: 1px;
+  }
   header .spacer { flex: 1; }
-  #health { font-size: 12px; color: var(--ink-2); }
-  #health .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); margin-right: 5px; }
-  #health.ok .dot { background: var(--good); }
+  #health { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+  #health .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+  #health.ok .dot { background: var(--good); box-shadow: 0 0 0 3px rgba(12,163,12,0.15); }
+  header a { color: var(--ink-3); font-size: 12px; text-decoration: none; }
+  header a:hover { color: var(--ink); }
   #key {
-    width: 180px; padding: 5px 8px; font: inherit; font-size: 12px;
-    border: 1px solid var(--hairline); border-radius: 6px;
+    width: 170px; padding: 6px 10px; font-size: 12px;
+    border: 1px solid var(--hairline); border-radius: 7px;
     background: var(--page); color: var(--ink);
   }
-  #tiles { display: flex; gap: 10px; padding: 12px 16px 0; }
+  #key::placeholder { color: var(--ink-3); }
+
+  #banner {
+    display: none; margin: 10px 18px 0; padding: 8px 12px; font-size: 13px;
+    border: 1px solid var(--critical); border-radius: 8px; color: var(--critical);
+    background: var(--surface); flex-shrink: 0;
+  }
+
+  /* ── stat tiles ─────────────────────────────────────────── */
+  #tiles { display: flex; gap: 10px; padding: 14px 18px 0; flex-shrink: 0; }
   .tile {
-    background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
-    padding: 10px 14px; min-width: 130px;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px;
+    padding: 12px 16px 11px; min-width: 150px;
   }
-  .tile .v { font-size: 22px; font-weight: 650; }
-  .tile .l { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
-  main { flex: 1; display: flex; gap: 12px; padding: 12px 16px 16px; min-height: 0; }
-  #list {
-    width: 320px; flex-shrink: 0; overflow-y: auto;
-    background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
+  .tile .v { font-size: 24px; font-weight: 650; line-height: 1.1; }
+  .tile .l {
+    font-size: 11px; color: var(--ink-2); margin-top: 3px;
+    text-transform: uppercase; letter-spacing: 0.06em;
   }
+  .tile.mix { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 190px; }
+  .mixrow { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+  .mixrow b { color: var(--ink); font-weight: 650; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* ── layout ─────────────────────────────────────────────── */
+  main { flex: 1; display: flex; gap: 12px; padding: 12px 18px 16px; min-height: 0; }
+  .pane { background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; }
+
+  /* ── sidebar ────────────────────────────────────────────── */
+  #side { width: 330px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; }
+  #sidetools { padding: 10px 10px 8px; border-bottom: 1px solid var(--grid); }
+  #search {
+    width: 100%; padding: 7px 10px; font-size: 13px;
+    border: 1px solid var(--hairline); border-radius: 7px;
+    background: var(--page); color: var(--ink);
+  }
+  #chips { display: flex; gap: 6px; margin-top: 8px; }
+  .chip {
+    border: 1px solid var(--hairline); background: none; border-radius: 999px;
+    font-size: 12px; padding: 2px 11px; color: var(--ink-2);
+  }
+  .chip:hover { background: var(--wash); }
+  .chip.on { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 600; }
+  #list { flex: 1; overflow-y: auto; }
   .conv {
-    padding: 10px 12px; border-bottom: 1px solid var(--grid); cursor: pointer;
+    display: flex; gap: 10px; padding: 11px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--grid); align-items: flex-start;
   }
   .conv:hover { background: var(--wash); }
-  .conv.sel { background: var(--wash); box-shadow: inset 3px 0 0 var(--ink); }
-  .conv .who { font-weight: 600; display: flex; align-items: center; gap: 6px; }
-  .conv .goal { color: var(--ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .conv .meta { color: var(--ink-3); font-size: 11px; margin-top: 2px; }
+  .conv.sel { background: var(--sel); box-shadow: inset 2.5px 0 0 var(--ch-sms); }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    background: var(--wash-2); color: var(--ink-2);
+    display: grid; place-items: center; font-size: 12.5px; font-weight: 650;
+  }
+  .conv .body { min-width: 0; flex: 1; }
+  .conv .row1 { display: flex; align-items: baseline; gap: 8px; }
+  .conv .who { font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conv .time { margin-left: auto; color: var(--ink-3); font-size: 11px; flex-shrink: 0; }
+  .conv .goal {
+    color: var(--ink-2); font-size: 12.5px; margin-top: 1px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .conv .row3 { display: flex; gap: 6px; margin-top: 4px; align-items: center; }
+  .conv .status { font-size: 11px; color: var(--ink-3); }
+
   .badge {
-    display: inline-flex; align-items: center; gap: 4px; font-size: 11px;
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
     color: var(--ink-2); border: 1px solid var(--hairline); border-radius: 999px;
-    padding: 1px 8px 1px 6px; background: var(--surface);
+    padding: 1px 9px 1px 7px; background: var(--surface); flex-shrink: 0;
   }
   .badge .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .dot.sms { background: var(--ch-sms); } .dot.email { background: var(--ch-email); } .dot.voice { background: var(--ch-voice); }
-  #panel {
-    flex: 1; min-width: 0; display: flex; flex-direction: column;
-    background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px;
+
+  /* ── conversation panel ─────────────────────────────────── */
+  #panel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #panelhead {
+    padding: 11px 16px; border-bottom: 1px solid var(--grid);
+    display: flex; align-items: center; gap: 10px; min-height: 54px;
   }
-  #panelhead { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; align-items: center; gap: 8px; }
-  #panelhead .who { font-weight: 650; }
-  #panelhead .goal { color: var(--ink-2); font-size: 12px; }
-  #timeline { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-  .msg { max-width: 68%; }
+  #panelhead .who { font-weight: 680; font-size: 15px; }
+  #panelhead .goal { color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #panelhead .spacer { flex: 1; }
+  .ghost {
+    border: 1px solid var(--hairline); background: none; border-radius: 7px;
+    font-size: 12.5px; padding: 5px 12px; color: var(--ink-2);
+  }
+  .ghost:hover { background: var(--wash); color: var(--ink); }
+  .ghost.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+  #panelbody { flex: 1; display: flex; min-height: 0; }
+  #timeline { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .day {
+    align-self: center; color: var(--ink-3); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.07em; padding: 2px 0; margin-top: 6px;
+  }
+  .msg { max-width: 64%; }
   .msg.inbound { align-self: flex-start; }
   .msg.outbound { align-self: flex-end; }
   .msg .bubble {
-    padding: 8px 11px; border-radius: 10px; border: 1px solid var(--hairline);
+    padding: 8px 12px; border-radius: 12px; border: 1px solid var(--hairline);
     background: var(--surface); white-space: pre-wrap; word-break: break-word;
   }
-  .msg.outbound .bubble { background: var(--wash); }
-  .msg .tag { font-size: 11px; color: var(--ink-3); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
+  .msg.inbound .bubble { border-bottom-left-radius: 4px; }
+  .msg.outbound .bubble { background: var(--wash-2); border-color: transparent; border-bottom-right-radius: 4px; }
+  .msg .tag {
+    font-size: 11px; color: var(--ink-3); margin-top: 4px;
+    display: flex; gap: 7px; align-items: center; padding: 0 2px;
+  }
   .msg.outbound .tag { justify-content: flex-end; }
-  .tag .status.failed { color: var(--critical); font-weight: 600; }
+  .tag .status.failed { color: var(--critical); font-weight: 650; }
   .tag .status.delivered { color: var(--good); }
+  .tag .status.queued { font-style: italic; }
   .event {
-    align-self: center; color: var(--ink-3); font-size: 11.5px;
-    border: 1px dashed var(--grid); border-radius: 999px; padding: 2px 12px;
-    max-width: 85%; text-align: center;
+    align-self: center; color: var(--ink-2); font-size: 12px;
+    border: 1px dashed var(--grid); border-radius: 999px; padding: 3px 14px;
+    max-width: 88%; text-align: center; background: var(--page);
   }
-  #composer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--grid); }
+  .event .t { color: var(--ink-3); }
+  .event .ico { margin-right: 5px; }
+
+  #composer { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--grid); }
   #composer input[type=text] {
-    flex: 1; padding: 8px 10px; font: inherit; border: 1px solid var(--hairline);
-    border-radius: 8px; background: var(--page); color: var(--ink);
+    flex: 1; padding: 9px 12px; border: 1px solid var(--hairline);
+    border-radius: 9px; background: var(--page); color: var(--ink);
   }
+  #composer input::placeholder { color: var(--ink-3); }
   #composer select, #composer button {
-    font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 8px;
-    border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); cursor: pointer;
+    font-size: 13px; padding: 8px 12px; border-radius: 9px;
+    border: 1px solid var(--hairline); background: var(--surface);
   }
-  #composer button { font-weight: 600; }
-  #composer button:hover { background: var(--wash); }
-  .empty { color: var(--ink-3); text-align: center; margin: auto; padding: 30px; }
-  #banner {
-    display: none; margin: 12px 16px 0; padding: 8px 12px; font-size: 13px;
-    border: 1px solid var(--critical); border-radius: 8px; color: var(--critical);
+  #composer button[type=submit] {
+    font-weight: 650; background: var(--ink); color: var(--surface); border-color: var(--ink);
+    padding: 8px 18px;
+  }
+  #composer button[type=submit]:hover:not(:disabled) { opacity: 0.86; }
+  #composer :disabled { opacity: 0.45; cursor: default; }
+
+  /* ── contact drawer ─────────────────────────────────────── */
+  #drawer {
+    width: 300px; flex-shrink: 0; border-left: 1px solid var(--grid);
+    overflow-y: auto; display: none; padding: 14px 14px 18px;
+  }
+  #drawer.open { display: block; }
+  #drawer h3 {
+    font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.07em;
+    margin: 16px 0 8px;
+  }
+  #drawer h3:first-child { margin-top: 2px; }
+  .idrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; color: var(--ink-2); }
+  .idrow .addr { color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
+  .flag { font-size: 10.5px; border-radius: 999px; padding: 1px 8px; margin-left: auto; flex-shrink: 0; }
+  .flag.out { color: var(--critical); border: 1px solid var(--critical); }
+  .speedrow { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); padding: 3px 0; }
+  .speedrow b { margin-left: auto; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fact {
+    border: 1px solid var(--grid); border-radius: 9px; padding: 8px 10px; margin-bottom: 8px;
+    font-size: 12.5px; position: relative;
+  }
+  .fact .topic {
+    display: inline-block; font-size: 10.5px; color: var(--ink-2);
+    background: var(--wash); border-radius: 999px; padding: 0 8px; margin-bottom: 4px;
+  }
+  .fact .when { color: var(--ink-3); font-size: 10.5px; margin-top: 4px; }
+  .fact .x {
+    position: absolute; top: 6px; right: 8px; border: 0; background: none;
+    color: var(--ink-3); font-size: 12px; padding: 2px; line-height: 1;
+  }
+  .fact .x:hover { color: var(--critical); }
+  #factform { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  #factform input {
+    padding: 7px 10px; font-size: 12.5px; border: 1px solid var(--hairline);
+    border-radius: 7px; background: var(--page); color: var(--ink);
+  }
+  #factform button {
+    align-self: flex-start; font-size: 12px; padding: 5px 14px; border-radius: 7px;
+    border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-2);
+  }
+  #factform button:hover { background: var(--wash); color: var(--ink); }
+
+  .empty { color: var(--ink-3); text-align: center; margin: auto; padding: 36px 24px; font-size: 13px; }
+  .empty .big { font-size: 26px; display: block; margin-bottom: 8px; opacity: 0.6; }
+
+  @media (max-width: 900px) {
+    #side { width: 260px; } #drawer { display: none !important; }
+    #tiles { flex-wrap: wrap; } .msg { max-width: 82%; }
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>ContactHop</h1><span class="sub">command center</span>
+  <div class="mark" aria-hidden="true"></div>
+  <div><h1>ContactHop</h1></div>
+  <span class="sub">command center</span>
   <span class="spacer"></span>
   <span id="health"><span class="dot"></span><span id="healthtext">connecting…</span></span>
-  <input id="key" type="password" placeholder="API key (if configured)" autocomplete="off">
+  <a href="/docs" target="_blank" rel="noopener">API docs</a>
+  <input id="key" type="password" placeholder="API key" autocomplete="off" aria-label="API key">
 </header>
-<div id="banner"></div>
+<div id="banner" role="alert"></div>
+
 <div id="tiles">
   <div class="tile"><div class="v" id="t-contacts">–</div><div class="l">Contacts</div></div>
   <div class="tile"><div class="v" id="t-active">–</div><div class="l">Active conversations</div></div>
   <div class="tile"><div class="v" id="t-total">–</div><div class="l">All conversations</div></div>
+  <div class="tile mix" aria-label="Active conversations by current channel">
+    <div class="mixrow"><span class="dot sms"></span>sms<b id="m-sms">–</b></div>
+    <div class="mixrow"><span class="dot email"></span>email<b id="m-email">–</b></div>
+    <div class="mixrow"><span class="dot voice"></span>voice<b id="m-voice">–</b></div>
+  </div>
 </div>
+
 <main>
-  <div id="list"><div class="empty">No conversations yet.</div></div>
-  <div id="panel">
-    <div id="panelhead"><span class="who">Select a conversation</span></div>
-    <div id="timeline"><div class="empty">The unified transcript — SMS, email, and voice turns in one timeline — appears here.</div></div>
+  <aside id="side" class="pane">
+    <div id="sidetools">
+      <input id="search" type="search" placeholder="Search conversations…" aria-label="Search conversations">
+      <div id="chips" role="tablist">
+        <button class="chip on" data-f="all">All</button>
+        <button class="chip" data-f="active">Active</button>
+        <button class="chip" data-f="closed">Closed</button>
+      </div>
+    </div>
+    <div id="list"><div class="empty"><span class="big">⌁</span>No conversations yet.</div></div>
+  </aside>
+
+  <section id="panel" class="pane">
+    <div id="panelhead">
+      <span class="who">Select a conversation</span>
+      <span class="spacer"></span>
+      <button id="drawerbtn" class="ghost" disabled>Contact &amp; memory</button>
+    </div>
+    <div id="panelbody">
+      <div id="timeline">
+        <div class="empty"><span class="big">⇄</span>The unified transcript — SMS, email, and voice turns<br>in one timeline — appears here.</div>
+      </div>
+      <aside id="drawer" aria-label="Contact details"></aside>
+    </div>
     <form id="composer">
       <input id="body" type="text" placeholder="Send as the agent…" autocomplete="off" disabled>
-      <select id="channel" disabled>
+      <select id="channel" disabled aria-label="Channel">
         <option value="">auto (policy)</option>
         <option value="sms">sms</option>
         <option value="email">email</option>
@@ -142,12 +310,16 @@
       </select>
       <button type="submit" disabled>Send</button>
     </form>
-  </div>
+  </section>
 </main>
+
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const state = { conversations: [], contacts: {}, selected: null, timer: null };
+const state = {
+  conversations: [], contacts: {}, selected: null,
+  filter: "all", search: "", drawer: false,
+};
 
 const keyInput = $("key");
 keyInput.value = localStorage.getItem("contacthop_key") || "";
@@ -173,7 +345,7 @@ async function api(path, options = {}) {
     throw new Error(detail);
   }
   banner(null);
-  return resp.json();
+  return resp.status === 204 ? null : resp.json();
 }
 
 function banner(text) {
@@ -182,20 +354,40 @@ function banner(text) {
   if (text) el.textContent = text;
 }
 
-function badge(channel) {
-  return `<span class="badge"><span class="dot ${esc(channel)}"></span>${esc(channel)}</span>`;
-}
+const badge = (ch) => `<span class="badge"><span class="dot ${esc(ch)}"></span>${esc(ch)}</span>`;
 
 function contactName(id) {
-  const contact = state.contacts[id];
-  if (!contact) return "Unknown contact";
-  return contact.display_name || (contact.identities[0] && contact.identities[0].address) || "Unnamed";
+  const c = state.contacts[id];
+  return c ? (c.display_name || (c.identities[0] && c.identities[0].address) || "Unnamed") : "Unknown";
 }
 
-function when(iso) {
-  const date = new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
-  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function initials(name) {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0] || "?")[0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
 }
+
+const asDate = (iso) => new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+
+function rel(iso) {
+  const s = (Date.now() - asDate(iso).getTime()) / 1000;
+  if (s < 60) return "now";
+  if (s < 3600) return Math.floor(s / 60) + "m";
+  if (s < 86400) return Math.floor(s / 3600) + "h";
+  if (s < 7 * 86400) return Math.floor(s / 86400) + "d";
+  return asDate(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+const clock = (iso) => asDate(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const dayLabel = (iso) => asDate(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+
+function humanSeconds(s) {
+  if (s < 90) return Math.round(s) + "s";
+  if (s < 5400) return Math.round(s / 60) + "m";
+  if (s < 129600) return Math.round(s / 3600) + "h";
+  return Math.round(s / 86400) + "d";
+}
+
+/* ── data ──────────────────────────────────────────────────── */
 
 async function refresh() {
   try {
@@ -206,36 +398,82 @@ async function refresh() {
     $("healthtext").textContent = "v" + health.version;
     state.contacts = Object.fromEntries(contacts.map(c => [c.id, c]));
     state.conversations = conversations;
+
+    const active = conversations.filter(c => c.status === "active");
     $("t-contacts").textContent = contacts.length;
-    $("t-active").textContent = conversations.filter(c => c.status === "active").length;
+    $("t-active").textContent = active.length;
     $("t-total").textContent = conversations.length;
+    for (const ch of ["sms", "email", "voice"]) {
+      $("m-" + ch).textContent = active.filter(c => c.current_channel === ch).length;
+    }
+
     renderList();
-    if (state.selected) await loadTimeline(state.selected, true);
+    if (state.selected) {
+      await loadTimeline(state.selected, true);
+      if (state.drawer) await loadDrawer();
+    }
   } catch (err) { /* banner already shown */ }
 }
 
+function visibleConversations() {
+  return state.conversations.filter(c => {
+    if (state.filter !== "all" && c.status !== state.filter) return false;
+    if (!state.search) return true;
+    const hay = (contactName(c.contact_id) + " " + (c.goal || "")).toLowerCase();
+    return hay.includes(state.search);
+  });
+}
+
+/* ── sidebar ───────────────────────────────────────────────── */
+
 function renderList() {
   const list = $("list");
-  if (!state.conversations.length) {
-    list.innerHTML = '<div class="empty">No conversations yet.</div>';
+  const rows = visibleConversations();
+  if (!rows.length) {
+    list.innerHTML = '<div class="empty"><span class="big">⌁</span>' +
+      (state.conversations.length ? "Nothing matches." : "No conversations yet.") + "</div>";
     return;
   }
-  list.innerHTML = state.conversations.map(c => `
-    <div class="conv ${c.id === state.selected ? "sel" : ""}" data-id="${c.id}">
-      <div class="who">${esc(contactName(c.contact_id))} ${badge(c.current_channel)}</div>
-      <div class="goal">${esc(c.goal || "(no goal)")}</div>
-      <div class="meta">${esc(c.status)} · started ${when(c.created_at)}</div>
-    </div>`).join("");
-  list.querySelectorAll(".conv").forEach(el =>
-    el.addEventListener("click", () => select(el.dataset.id)));
+  list.innerHTML = rows.map(c => {
+    const name = contactName(c.contact_id);
+    return `
+    <div class="conv ${c.id === state.selected ? "sel" : ""}" data-id="${c.id}" role="button" tabindex="0">
+      <div class="avatar">${esc(initials(name))}</div>
+      <div class="body">
+        <div class="row1"><span class="who">${esc(name)}</span>
+          <span class="time">${esc(rel(c.created_at))}</span></div>
+        <div class="goal">${esc(c.goal || "(no goal)")}</div>
+        <div class="row3">${badge(c.current_channel)}<span class="status">${esc(c.status)}</span></div>
+      </div>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".conv").forEach(el => {
+    el.addEventListener("click", () => select(el.dataset.id));
+    el.addEventListener("keydown", (kb) => { if (kb.key === "Enter") select(el.dataset.id); });
+  });
 }
+
+$("search").addEventListener("input", (ev) => {
+  state.search = ev.target.value.trim().toLowerCase();
+  renderList();
+});
+document.querySelectorAll(".chip").forEach(chip =>
+  chip.addEventListener("click", () => {
+    state.filter = chip.dataset.f;
+    document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === chip));
+    renderList();
+  }));
+
+/* ── timeline ──────────────────────────────────────────────── */
 
 async function select(id) {
   state.selected = id;
   renderList();
   ["body", "channel"].forEach(x => $(x).disabled = false);
   document.querySelector("#composer button").disabled = false;
+  $("drawerbtn").disabled = false;
   await loadTimeline(id, false);
+  if (state.drawer) await loadDrawer();
 }
 
 async function loadTimeline(id, keepScroll) {
@@ -244,7 +482,10 @@ async function loadTimeline(id, keepScroll) {
     $("panelhead").innerHTML =
       `<span class="who">${esc(contactName(conversation.contact_id))}</span>` +
       badge(conversation.current_channel) +
-      `<span class="goal">${esc(conversation.goal || "")}</span>`;
+      `<span class="goal">${esc(conversation.goal || "")}</span>` +
+      `<span class="spacer"></span>` +
+      `<button id="drawerbtn" class="ghost ${state.drawer ? "on" : ""}">Contact &amp; memory</button>`;
+    $("drawerbtn").addEventListener("click", toggleDrawer);
   }
   const [messages, events] = await Promise.all([
     api(`/v1/conversations/${id}/transcript`), api(`/v1/conversations/${id}/events`),
@@ -254,41 +495,126 @@ async function loadTimeline(id, keepScroll) {
     ...events.map(e => ({ at: e.created_at, kind: "event", e })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
+  const parts = [];
+  let lastDay = "";
+  for (const entry of entries) {
+    const day = dayLabel(entry.at);
+    if (day !== lastDay) { parts.push(`<div class="day">${esc(day)}</div>`); lastDay = day; }
+    parts.push(render(entry));
+  }
+
   const timeline = $("timeline");
   const stick = keepScroll ? timeline.scrollTop : null;
-  timeline.innerHTML = entries.length ? entries.map(render).join("")
-    : '<div class="empty">No messages yet — send one below.</div>';
+  timeline.innerHTML = parts.length ? parts.join("")
+    : '<div class="empty"><span class="big">✎</span>No messages yet — send one below.</div>';
   timeline.scrollTop = stick === null ? timeline.scrollHeight : stick;
 }
 
 function render(entry) {
   if (entry.kind === "event") {
     const { type, payload } = entry.e;
-    let text = type;
-    if (type === "channel_switch") text = `switched ${payload.from} → ${payload.to} — ${payload.reason}`;
-    else if (type === "escalation") text = `escalation: no reply on ${payload.no_reply_on}, suggests ${payload.suggested_channel} (attempt ${payload.attempt})`;
-    else if (payload && payload.note) text = payload.note;
-    return `<div class="event">${esc(text)} · ${when(entry.at)}</div>`;
+    let ico = "•", text = type;
+    if (type === "channel_switch") {
+      ico = "⇄"; text = `${payload.from} → ${payload.to} — ${payload.reason}`;
+    } else if (type === "escalation") {
+      ico = "△"; text = `no reply on ${payload.no_reply_on}; suggests ${payload.suggested_channel} (attempt ${payload.attempt})`;
+    } else if (payload && payload.note) { text = payload.note; }
+    return `<div class="event"><span class="ico">${ico}</span>${esc(text)} <span class="t">· ${clock(entry.at)}</span></div>`;
   }
   const { direction, channel, body, delivery_status } = entry.m;
   const who = direction === "inbound" ? "them" : "agent";
-  const statusClass = delivery_status === "failed" ? "failed" : delivery_status === "delivered" ? "delivered" : "";
   const statusText = delivery_status === "failed" ? "✕ failed" : delivery_status;
   return `<div class="msg ${esc(direction)}">
     <div class="bubble">${esc(body)}</div>
     <div class="tag">${badge(channel)} <span>${who}</span>
-      <span class="status ${statusClass}">${esc(statusText)}</span> <span>${when(entry.at)}</span></div>
+      <span class="status ${esc(delivery_status)}">${esc(statusText)}</span> <span>${clock(entry.at)}</span></div>
   </div>`;
 }
 
-$("composer").addEventListener("submit", async (submitEvent) => {
-  submitEvent.preventDefault();
+/* ── contact drawer ────────────────────────────────────────── */
+
+function toggleDrawer() {
+  state.drawer = !state.drawer;
+  $("drawer").classList.toggle("open", state.drawer);
+  $("drawerbtn").classList.toggle("on", state.drawer);
+  if (state.drawer) loadDrawer();
+}
+
+async function loadDrawer() {
+  const conversation = state.conversations.find(c => c.id === state.selected);
+  if (!conversation) return;
+  const contactId = conversation.contact_id;
+  const contact = state.contacts[contactId];
+  let stats = { median_reply_seconds: {} }, memory = [];
+  try {
+    [stats, memory] = await Promise.all([
+      api(`/v1/contacts/${contactId}/stats`),
+      api(`/v1/contacts/${contactId}/memory?limit=50`),
+    ]);
+  } catch { /* memory may be disabled */ }
+
+  const identities = (contact ? contact.identities : []).map(i => `
+    <div class="idrow"><span class="dot ${esc(i.channel)}"></span>
+      <span class="addr">${esc(i.address)}</span>
+      ${i.opted_out ? '<span class="flag out">opted out</span>' : ""}
+    </div>`).join("") || '<div class="idrow">none</div>';
+
+  const speeds = Object.entries(stats.median_reply_seconds || {});
+  const speedRows = speeds.length ? speeds.map(([ch, s]) => `
+    <div class="speedrow"><span class="dot ${esc(ch)}"></span>${esc(ch)}<b>~${humanSeconds(s)}</b></div>`).join("")
+    : '<div class="speedrow">no replies measured yet</div>';
+
+  const facts = memory.length ? memory.map(f => `
+    <div class="fact" data-fid="${f.id}">
+      ${f.topic ? `<span class="topic">${esc(f.topic)}</span>` : ""}
+      <div>${esc(f.text)}</div>
+      <div class="when">${esc(rel(f.created_at))} ago</div>
+      <button class="x" title="Forget" aria-label="Forget fact">✕</button>
+    </div>`).join("")
+    : '<div class="speedrow">nothing remembered yet</div>';
+
+  $("drawer").innerHTML = `
+    <h3>Identities</h3>${identities}
+    <h3>Reply speed (median)</h3>${speedRows}
+    <h3>Memory</h3>${facts}
+    <form id="factform">
+      <input id="facttext" placeholder="Remember something…" autocomplete="off">
+      <input id="facttopic" placeholder="Topic (optional)" autocomplete="off">
+      <button type="submit">Remember</button>
+    </form>`;
+
+  $("drawer").querySelectorAll(".fact .x").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      await api(`/v1/contacts/${contactId}/memory/${btn.closest(".fact").dataset.fid}`, { method: "DELETE" });
+      loadDrawer();
+    }));
+  $("factform").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const text = $("facttext").value.trim();
+    if (!text) return;
+    try {
+      await api(`/v1/contacts/${contactId}/memory`, {
+        method: "POST",
+        body: JSON.stringify({
+          text, topic: $("facttopic").value.trim() || null, conversation_id: state.selected,
+        }),
+      });
+      loadDrawer();
+    } catch (err) { banner("Remember failed: " + err.message); }
+  });
+}
+
+$("drawerbtn").addEventListener("click", toggleDrawer);
+
+/* ── composer ──────────────────────────────────────────────── */
+
+$("composer").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
   const body = $("body").value.trim();
   if (!body || !state.selected) return;
-  const channel = $("channel").value || null;
   try {
     await api(`/v1/conversations/${state.selected}/messages`, {
-      method: "POST", body: JSON.stringify({ body, channel }),
+      method: "POST", body: JSON.stringify({ body, channel: $("channel").value || null }),
     });
     $("body").value = "";
     await loadTimeline(state.selected, false);
@@ -297,7 +623,7 @@ $("composer").addEventListener("submit", async (submitEvent) => {
 });
 
 refresh();
-state.timer = setInterval(refresh, 5000);
+setInterval(refresh, 5000);
 </script>
 </body>
 </html>

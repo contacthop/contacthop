@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hmac
-from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -13,10 +12,15 @@ from contacthop.domain.enums import ChannelType
 from contacthop.memory.store import MemoryStore
 
 
-async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
-    async with request.app.state.db.session() as session:
-        yield session
-        await session.commit()
+def get_session(request: Request) -> AsyncSession:
+    """The request-scoped session opened by the db-session middleware.
+
+    The middleware commits BEFORE the response is sent (a yield-dependency's
+    teardown runs after it, which broke read-your-writes: a client could POST
+    a contact, get 201, and immediately 404 using it).
+    """
+    session: AsyncSession = request.state.db_session
+    return session
 
 
 def get_settings(request: Request) -> Settings:

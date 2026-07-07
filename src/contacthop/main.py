@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 
 from contacthop import __version__
 from contacthop.api.deps import require_api_key
@@ -140,6 +141,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.adapters = adapters
     app.state.scheduler = scheduler
     app.state.memory = memory_store
+
+    @app.middleware("http")
+    async def db_session_middleware(request: Request, call_next: Any) -> Any:
+        """One session per request, committed BEFORE the response is sent.
+
+        Yield-dependency teardown runs after the response, which loses the
+        read-your-writes guarantee (create a contact, get 201, immediately
+        404 using it). Error responses roll back instead of committing.
+        """
+        async with db.session() as session:
+            request.state.db_session = session
+            response = await call_next(request)
+            if response.status_code < 400:
+                await session.commit()
+            return response
 
     protected = [Depends(require_api_key)]
     app.include_router(contacts.router, dependencies=protected)
