@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 
 import uvicorn
 
@@ -25,6 +26,28 @@ def main(argv: list[str] | None = None) -> None:
         "revision", nargs="?", default="head", help="target revision (default: head)"
     )
 
+    mcp = sub.add_parser(
+        "mcp", help="run the MCP server exposing ContactHop as agent tools"
+    )
+    mcp.add_argument(
+        "--base-url",
+        default=os.environ.get("CONTACTHOP_URL", "http://127.0.0.1:8000"),
+        help="ContactHop API to drive (env: CONTACTHOP_URL)",
+    )
+    mcp.add_argument(
+        "--api-key",
+        default=os.environ.get("CONTACTHOP_API_KEY"),
+        help="Bearer key for the API, if configured (env: CONTACTHOP_API_KEY)",
+    )
+    mcp.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http", "sse"],
+        default="stdio",
+        help="stdio for runtimes that spawn the server (default); http/sse to listen",
+    )
+    mcp.add_argument("--host", default="127.0.0.1")
+    mcp.add_argument("--port", type=int, default=8090)
+
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
@@ -40,6 +63,13 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_init_db())
     elif args.command == "migrate":
         _migrate(args.revision)
+    elif args.command == "mcp":
+        from contacthop.mcp_server import build_server
+
+        server = build_server(base_url=args.base_url, api_key=args.api_key)
+        server.settings.host = args.host
+        server.settings.port = args.port
+        server.run(transport=args.transport)
 
 
 async def _init_db() -> None:

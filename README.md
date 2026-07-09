@@ -23,7 +23,7 @@ Designed for the next generation of personal AI systems, autonomous operators, e
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
 
-**Contents:** [Installation](#installation) · [Quickstart](#quickstart) · [Command center](#command-center) · [Python SDK](#python-sdk) · [Memory](#contact-memory-graph-backed) · [HTTP API](#http-api-at-a-glance) · [Configuration](#configuration) · [Deploying to production](#deploying-to-production) · [Development](#development) · [License](#license)
+**Contents:** [Installation](#installation) · [Quickstart](#quickstart) · [Command center](#command-center) · [Python SDK](#python-sdk) · [Memory](#contact-memory-graph-backed) · [MCP](#mcp-server-bring-any-model) · [HTTP API](#http-api-at-a-glance) · [Configuration](#configuration) · [Deploying to production](#deploying-to-production) · [Development](#development) · [License](#license)
 
 ## Installation
 
@@ -152,6 +152,32 @@ Backends (`CONTACTHOP_MEMORY_STORE`):
 | `inmemory` (default) | Fully functional, process-local — dev/demo, lost on restart |
 | `falkordb` | A knowledge graph in [FalkorDB](https://falkordb.com): `(Contact)-[:KNOWS]->(Fact)-[:ABOUT]->(Topic)` with `(Fact)-[:FROM]->(Conversation)` provenance. Install `contacthop[falkordb]`; `docker compose up` runs FalkorDB and uses it automatically. The graph shape is what enables cross-contact topic traversal and future relationship queries |
 | `none` | Memory disabled: writes are rejected, recalls are empty |
+
+## MCP server (bring any model)
+
+ContactHop stays a harness: it never contains or chooses your model. The MCP server exposes everything as standard [Model Context Protocol](https://modelcontextprotocol.io) tools, so any MCP-capable runtime — Qwen-Agent, Claude, OpenAI Agents SDK, a custom loop — can drive cross-channel conversations:
+
+```bash
+pip install 'contacthop[mcp]'
+contacthop mcp --base-url https://hop.example.com --api-key $KEY   # stdio (default)
+contacthop mcp --transport streamable-http --port 8090             # or listen over HTTP
+```
+
+Twelve tools: `list_contacts`, `create_contact`, `contact_stats`, `list_conversations`, `start_conversation`, `get_context`, `send_message`, `switch_channel`, `place_call`, `remember`, `recall`, `recall_topic`. The server is a thin client of the REST API — never the database — so every send still passes through the gateway backstops (quiet hours, rate limits, consent, auth) no matter what model is calling, and rejections surface as tool errors carrying the reason so the model can adapt.
+
+Example client config (Claude Desktop / any stdio-spawning runtime):
+
+```json
+{
+  "mcpServers": {
+    "contacthop": {
+      "command": "contacthop",
+      "args": ["mcp", "--base-url", "https://hop.example.com"],
+      "env": { "CONTACTHOP_API_KEY": "your-key" }
+    }
+  }
+}
+```
 
 ## HTTP API at a glance
 

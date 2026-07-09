@@ -37,6 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 postgres = ["asyncpg>=0.29"]
 falkordb = ["falkordb>=1.0"]
+mcp = ["mcp>=1.2"]
 
 [project.scripts]
 contacthop = "contacthop.cli:main"
@@ -51,6 +52,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
     "mypy>=1.10",
+    "mcp>=1.2",
 ]
 
 [tool.hatch.build.targets.wheel]
