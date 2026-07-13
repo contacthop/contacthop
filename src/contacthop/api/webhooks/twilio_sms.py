@@ -12,7 +12,7 @@ from sqlalchemy import select
 from contacthop.api.deps import SessionDep, SettingsDep
 from contacthop.api.webhooks.twilio_common import require_twilio_signature
 from contacthop.domain.enums import ChannelType, DeliveryStatus, Direction, EventType
-from contacthop.domain.models import Conversation, ConversationEvent, Message
+from contacthop.domain.models import Contact, Conversation, ConversationEvent, Message
 from contacthop.domain.schemas import AgentNotification, InboundMessage
 from contacthop.orchestrator.consent import ConsentAction, classify
 from contacthop.orchestrator.conversation import (
@@ -66,6 +66,8 @@ async def inbound_sms(
     )
     message = await record_inbound(session, inbound)
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
+    owner = await session.get(Contact, identity.contact_id)
+    owner_agent_id = owner.agent_id if owner else None
 
     # Consent keywords take effect before the agent ever sees the message.
     action = classify(inbound.body)
@@ -84,7 +86,9 @@ async def inbound_sms(
             contact_id=identity.contact_id,
             payload={"channel": "sms", "address": identity.address},
         )
-        delivery = await enqueue_notification(session, settings, notification)
+        delivery = await enqueue_notification(
+            session, settings, notification, agent_id=owner_agent_id
+        )
         await session.commit()
         if delivery is not None:
             background.add_task(attempt_delivery, request.app.state.db, settings, delivery.id)
@@ -100,7 +104,10 @@ async def inbound_sms(
     # Durable outbox: stored with this transaction, delivered in the background,
     # retried by the scheduler if the agent is unreachable.
     delivery = await enqueue_notification(
-        session, settings, inbound_notification(message, identity.contact_id)
+        session,
+        settings,
+        inbound_notification(message, identity.contact_id),
+        agent_id=owner_agent_id,
     )
     await session.commit()
     if delivery is not None:
@@ -157,7 +164,9 @@ async def sms_delivery_status(
                     "provider_status": form.get("MessageStatus"),
                 },
             )
-            delivery = await enqueue_notification(session, settings, notification)
+            delivery = await enqueue_notification(
+                session, settings, notification, agent_id=conversation.agent_id
+            )
             await session.commit()
             if delivery is not None:
                 background.add_task(

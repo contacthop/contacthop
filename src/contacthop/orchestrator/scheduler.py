@@ -108,6 +108,7 @@ class FollowUpScheduler:
                         contact_id=conversation.contact_id,
                         payload=payload,
                     ),
+                    agent_id=conversation.agent_id,
                 )
                 if delivery is not None:
                     delivery_ids.append(delivery.id)

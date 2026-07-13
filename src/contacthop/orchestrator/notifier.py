@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from contacthop.config import Settings
 from contacthop.db.session import Database
 from contacthop.domain.enums import WebhookDeliveryStatus
-from contacthop.domain.models import AgentDelivery, utcnow
+from contacthop.domain.models import Agent, AgentDelivery, utcnow
 from contacthop.domain.schemas import AgentNotification
 
 logger = logging.getLogger("contacthop.notifier")
@@ -44,14 +44,30 @@ async def _post(url: str, payload: dict) -> None:
         response.raise_for_status()
 
 
+async def _webhook_url(
+    session: AsyncSession, settings: Settings, agent_id: uuid.UUID | None
+) -> str | None:
+    """The owning agent's webhook if set, else the global one (multi-tenant
+    deployments route each tenant's events to its own runtime)."""
+    if agent_id is not None:
+        agent = await session.get(Agent, agent_id)
+        if agent is not None and agent.webhook_url:
+            return agent.webhook_url
+    return settings.agent_webhook_url
+
+
 async def enqueue_notification(
-    session: AsyncSession, settings: Settings, notification: AgentNotification
+    session: AsyncSession,
+    settings: Settings,
+    notification: AgentNotification,
+    agent_id: uuid.UUID | None = None,
 ) -> AgentDelivery | None:
     """Persist the notification in the caller's transaction. Returns None when
-    no agent webhook is configured (nothing to deliver, nothing to store)."""
-    if not settings.agent_webhook_url:
+    neither the owning agent nor the deployment has a webhook configured."""
+    if await _webhook_url(session, settings, agent_id) is None:
         return None
     delivery = AgentDelivery(
+        agent_id=agent_id,
         event=notification.event,
         conversation_id=notification.conversation_id,
         payload=notification.model_dump(mode="json"),
@@ -66,15 +82,16 @@ async def attempt_delivery(db: Database, settings: Settings, delivery_id: uuid.U
 
     Runs outside any request transaction (background task or scheduler sweep).
     """
-    if not settings.agent_webhook_url:
-        return False
     async with db.session() as session:
         delivery = await session.get(AgentDelivery, delivery_id)
         if delivery is None or delivery.status != WebhookDeliveryStatus.PENDING:
             return False
+        url = await _webhook_url(session, settings, delivery.agent_id)
         delivery.attempts += 1
         try:
-            await _post(settings.agent_webhook_url, delivery.payload)
+            if url is None:
+                raise RuntimeError("no webhook URL configured for this delivery")
+            await _post(url, delivery.payload)
         except Exception as exc:
             delivery.last_error = str(exc)[:500]
             if delivery.attempts >= settings.agent_webhook_max_attempts:
@@ -100,8 +117,6 @@ async def attempt_delivery(db: Database, settings: Settings, delivery_id: uuid.U
 
 async def deliver_due(db: Database, settings: Settings) -> int:
     """Retry every pending delivery whose backoff has elapsed. Returns count delivered."""
-    if not settings.agent_webhook_url:
-        return 0
     async with db.session() as session:
         result = await session.execute(
             select(AgentDelivery.id)

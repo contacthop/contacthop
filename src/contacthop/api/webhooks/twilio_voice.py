@@ -115,7 +115,9 @@ async def turn(
             contact_id=conversation.contact_id,
             message=MessageRead.model_validate(message),
         )
-        delivery = await enqueue_notification(session, settings, notification)
+        delivery = await enqueue_notification(
+            session, settings, notification, agent_id=conversation.agent_id
+        )
         await session.commit()
         if delivery is not None:
             background.add_task(

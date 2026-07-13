@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
 from contacthop.api.deps import SessionDep, SettingsDep
 from contacthop.domain.enums import ChannelType
+from contacthop.domain.models import Contact
 from contacthop.domain.schemas import EmailInboundPayload, InboundMessage
 from contacthop.orchestrator.conversation import (
     inbound_notification,
@@ -47,10 +48,14 @@ async def inbound_email(
     )
     message = await record_inbound(session, inbound)
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
+    owner = await session.get(Contact, identity.contact_id)
     # Durable outbox: stored with this transaction, delivered in the background,
     # retried by the scheduler if the agent is unreachable.
     delivery = await enqueue_notification(
-        session, settings, inbound_notification(message, identity.contact_id)
+        session,
+        settings,
+        inbound_notification(message, identity.contact_id),
+        agent_id=owner.agent_id if owner else None,
     )
     await session.commit()
     if delivery is not None:

@@ -48,10 +48,30 @@ class Base(DeclarativeBase):
     type_annotation_map = {dict[str, Any]: JSON}
 
 
+class Agent(Base):
+    """A tenant: an agent runtime with its own API key, webhook, and data.
+
+    Rows scoped to an agent (contacts, conversations, deliveries) are invisible
+    to other agents. Admin keys (CONTACTHOP_API_KEYS) and open dev mode see
+    everything. agent_id=None rows belong to the admin/dev scope.
+    """
+
+    __tablename__ = "agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    # sha256 of the API key; plaintext is shown once at creation/rotation.
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Overrides the global CONTACTHOP_AGENT_WEBHOOK_URL for this agent's events.
+    webhook_url: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Contact(Base):
     __tablename__ = "contacts"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agents.id"), index=True)
     display_name: Mapped[str | None] = mapped_column(String(200))
     preferences: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -88,6 +108,8 @@ class Conversation(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contacts.id"), index=True)
+    # Denormalized from the contact at creation, for cheap tenant filtering.
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agents.id"), index=True)
     status: Mapped[ConversationStatus] = mapped_column(
         str_enum(ConversationStatus), default=ConversationStatus.ACTIVE
     )
@@ -178,6 +200,7 @@ class AgentDelivery(Base):
     __tablename__ = "agent_deliveries"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agents.id"), index=True)
     event: Mapped[str] = mapped_column(String(80))
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

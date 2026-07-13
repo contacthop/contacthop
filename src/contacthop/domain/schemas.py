@@ -180,6 +180,31 @@ class ContactStatsRead(BaseModel):
     median_reply_seconds: dict[ChannelType, float]
 
 
+class AgentCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    webhook_url: str | None = Field(default=None, max_length=500)
+
+
+class AgentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    webhook_url: str | None
+    created_at: datetime
+
+
+class AgentCreatedRead(AgentRead):
+    """Returned once, at creation or key rotation — the key is never shown again."""
+
+    api_key: str
+
+
+class AgentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    webhook_url: str | None = Field(default=None, max_length=500)
+
+
 class AgentDeliveryRead(BaseModel):
     """A webhook notification's delivery state (the outbox / dead letter view)."""
 

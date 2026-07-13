@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import hashlib
 import hmac
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contacthop.channels.base import ChannelAdapter
 from contacthop.config import Settings
 from contacthop.domain.enums import ChannelType
+from contacthop.domain.models import Agent
 from contacthop.memory.store import MemoryStore
 
 
@@ -38,23 +42,73 @@ def get_memory(request: Request) -> MemoryStore:
     return memory
 
 
-def require_api_key(request: Request) -> None:
-    """Bearer-token auth for the management API; no-op when no keys configured."""
+@dataclass
+class Principal:
+    """Who is calling the management API.
+
+    - admin: an env-configured key (CONTACTHOP_API_KEYS), or open dev mode
+      with no keys anywhere — sees everything.
+    - agent-scoped: a DB-backed agent key — sees only its own tenant's data.
+    """
+
+    agent: Agent | None = None
+    is_admin: bool = False
+
+    @property
+    def agent_id(self):  # noqa: ANN201 - uuid.UUID | None
+        return self.agent.id if self.agent else None
+
+
+def hash_key(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+async def authenticate(request: Request) -> Principal:
     settings: Settings = request.app.state.settings
-    if not settings.api_keys:
-        return
-    keys = {k.strip() for k in settings.api_keys.split(",") if k.strip()}
     header = request.headers.get("Authorization", "")
     token = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else ""
-    if not any(hmac.compare_digest(token, key) for key in keys):
+
+    admin_keys = {
+        k.strip() for k in (settings.api_keys or "").split(",") if k.strip()
+    }
+    if token:
+        if any(hmac.compare_digest(token, key) for key in admin_keys):
+            return Principal(is_admin=True)
+        session: AsyncSession = request.state.db_session
+        result = await session.execute(select(Agent).where(Agent.key_hash == hash_key(token)))
+        agent = result.scalar_one_or_none()
+        if agent is not None:
+            return Principal(agent=agent)
         raise HTTPException(
             status_code=401,
-            detail="invalid or missing API key",
+            detail="invalid API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if admin_keys:
+        raise HTTPException(
+            status_code=401,
+            detail="missing API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    # Open dev mode: no keys configured anywhere → full access.
+    return Principal(is_admin=True)
+
+
+def require_admin(principal: Principal) -> None:
+    if not principal.is_admin:
+        raise HTTPException(status_code=403, detail="admin API key required")
+
+
+def ensure_visible(owner_agent_id, principal: Principal) -> None:  # noqa: ANN001
+    """404 when an agent-scoped key touches another tenant's row (indistinguishable
+    from nonexistent — no cross-tenant existence oracle)."""
+    if principal.agent is not None and owner_agent_id != principal.agent.id:
+        raise HTTPException(status_code=404, detail="not found")
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 AdaptersDep = Annotated[dict[ChannelType, ChannelAdapter], Depends(get_adapters)]
 MemoryDep = Annotated[MemoryStore, Depends(get_memory)]
+PrincipalDep = Annotated[Principal, Depends(authenticate)]

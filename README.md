@@ -236,7 +236,7 @@ cp demo.env .env
 | `CONTACTHOP_FOLLOW_UP_POLL_INTERVAL` | `5.0` | Seconds between scheduler sweeps for due follow-ups |
 | `CONTACTHOP_SEND_WINDOW_SMS` / `_EMAIL` / `_VOICE` | — (always) | Per-channel send window (quiet hours), `HH:MM-HH:MM`, may wrap midnight |
 | `CONTACTHOP_DEFAULT_TIMEZONE` | `UTC` | IANA timezone the windows are evaluated in when a contact has none |
-| `CONTACTHOP_API_KEYS` | — (open) | Comma-separated Bearer tokens required on the `/v1` management API |
+| `CONTACTHOP_API_KEYS` | — (open) | Comma-separated **admin** Bearer tokens; per-tenant agent keys are minted via `/v1/agents` |
 | `CONTACTHOP_MAX_MESSAGES_PER_HOUR` | `30` | Per-contact outbound cap, rolling hour, all channels; `0` = unlimited |
 | `CONTACTHOP_SMS_HELP_REPLY` / `_SMS_OPT_IN_REPLY` | sensible defaults | Replies to the HELP and START SMS keywords |
 
@@ -255,9 +255,20 @@ Enforcement is a hard backstop in the outbound gateway — below the policy engi
 - placing calls outside the voice window is rejected, and escalation suggestions skip closed channels,
 - the one exemption: speaking into an **already-live** voice call is always allowed — the human is on the line.
 
-### Auth, rate limits & delivery receipts
+### Auth, multi-tenancy, rate limits & delivery receipts
 
 Set `CONTACTHOP_API_KEYS` and every `/v1` endpoint requires `Authorization: Bearer <key>` (the SDK's `api_key` parameter sends it). Webhooks and `/health` are unaffected — webhooks authenticate with provider signatures and shared secrets instead.
+
+One deployment can serve **multiple isolated agents (tenants)**. `CONTACTHOP_API_KEYS` are *admin* keys that see everything and manage tenants:
+
+```bash
+curl -s localhost:8000/v1/agents -H "authorization: Bearer $ADMIN_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"name": "sales-assistant", "webhook_url": "https://sales-agent.example.com/"}'
+# → { "id": …, "api_key": "chk_…" }   ← shown once, stored hashed
+```
+
+An agent's key scopes it to its own contacts, conversations, memory, and webhook deliveries — other tenants' data is indistinguishable from nonexistent (404). Each tenant's events are pushed to its own `webhook_url` (falling back to the global `CONTACTHOP_AGENT_WEBHOOK_URL`), and inbound messages are routed to the tenant that owns the sender's address. Rotate keys with `POST /v1/agents/{id}/rotate-key`. With no agents defined, nothing changes — single-tenant deployments and open dev mode work exactly as before.
 
 `CONTACTHOP_MAX_MESSAGES_PER_HOUR` caps outbound messages (and call originations) per contact across all channels in a rolling hour — the anti-spam half of the gateway backstop. Inbound messages never count against it, and contacts can carry their own limit via `preferences: {"max_messages_per_hour": 10}`. Exceeding it returns 429.
 

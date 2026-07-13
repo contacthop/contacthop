@@ -241,3 +241,22 @@ class ContactHopClient:
     async def health(self) -> dict[str, str]:
         result: dict[str, str] = await self._request("GET", "/health")
         return result
+
+    # -- agent (tenant) management — admin keys only --------------------------
+
+    async def create_agent(self, name: str, webhook_url: str | None = None) -> dict[str, Any]:
+        """Create a tenant. The response's 'api_key' is shown once — store it."""
+        result: dict[str, Any] = await self._request(
+            "POST", "/v1/agents", {"name": name, "webhook_url": webhook_url}
+        )
+        return result
+
+    async def list_agents(self) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = await self._request("GET", "/v1/agents")
+        return result
+
+    async def rotate_agent_key(self, agent_id: uuid.UUID | str) -> dict[str, Any]:
+        result: dict[str, Any] = await self._request(
+            "POST", f"/v1/agents/{agent_id}/rotate-key"
+        )
+        return result

@@ -10,8 +10,15 @@ from typing import Any
 from fastapi import Depends, FastAPI, Request
 
 from contacthop import __version__
-from contacthop.api.deps import require_api_key
-from contacthop.api.routes import contacts, conversations, dashboard, deliveries, memory
+from contacthop.api.deps import authenticate
+from contacthop.api.routes import (
+    agents,
+    contacts,
+    conversations,
+    dashboard,
+    deliveries,
+    memory,
+)
 from contacthop.api.webhooks import email_inbound, twilio_sms, twilio_voice
 from contacthop.channels.base import ChannelAdapter
 from contacthop.channels.email.console import ConsoleEmailAdapter
@@ -157,7 +164,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await session.commit()
             return response
 
-    protected = [Depends(require_api_key)]
+    protected = [Depends(authenticate)]
+    app.include_router(agents.router, dependencies=protected)
     app.include_router(contacts.router, dependencies=protected)
     app.include_router(conversations.router, dependencies=protected)
     app.include_router(memory.router, dependencies=protected)
