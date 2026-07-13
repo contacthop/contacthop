@@ -104,7 +104,7 @@ While the call is open, agent messages to the conversation are queued and spoken
 
 ## Command center
 
-Every deployment ships an operational dashboard at **`/dashboard`** — no separate frontend to deploy, no build step, no external assets. It shows contacts and conversations at a glance, and for each conversation the unified timeline: SMS, email, and voice turns interleaved with channel-switch, escalation, and consent events, plus live delivery status. You can also reply as the agent directly from the page (channel picked by the policy engine, or forced). Data flows through the same authenticated `/v1` API the SDK uses — enter your API key in the header field when one is configured. Auto-refreshes every 5 seconds; light and dark theme follow the system.
+Every deployment ships an operational dashboard at **`/dashboard`** — no separate frontend to deploy, no build step, no external assets. It shows contacts and conversations at a glance, and for each conversation the unified timeline: SMS, email, and voice turns interleaved with channel-switch, escalation, and consent events, plus live delivery status. You can also reply as the agent directly from the page (channel picked by the policy engine, or forced), and the notifications tile turns red when agent webhook deliveries dead-letter — click it to inspect errors and retry. Data flows through the same authenticated `/v1` API the SDK uses — enter your API key in the header field when one is configured. Auto-refreshes every 5 seconds; light and dark theme follow the system.
 
 ## Python SDK
 

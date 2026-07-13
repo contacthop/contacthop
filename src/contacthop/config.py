@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # Contacts can override via preferences["max_messages_per_hour"].
     max_messages_per_hour: int = 30
 
+    # Reject outbound messages that look like model repetition loops
+    # (doom loops) before they reach a human.
+    repetition_guard: bool = True
+
     # Replies to the HELP and START SMS keywords. STOP gets no app-level reply —
     # the carrier/Twilio sends the mandated confirmation and blocks the number.
     sms_help_reply: str = (

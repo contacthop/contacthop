@@ -33,7 +33,10 @@ def test_long_form_hops_to_email_and_threads(client: TestClient) -> None:
     contact = make_contact(client)
     conversation = make_conversation(client, contact["id"])
 
-    long_body = "Here is the full quarterly breakdown. " * 60  # > policy threshold
+    # > policy threshold, varied enough to pass the repetition guard
+    long_body = "Quarterly breakdown follows. " + " ".join(
+        f"Item {i}: revenue detail number {i} with margin note {i * 7}." for i in range(60)
+    )
     first = client.post(
         f"/v1/conversations/{conversation['id']}/messages", json={"body": long_body}
     ).json()

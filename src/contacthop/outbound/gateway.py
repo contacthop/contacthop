@@ -30,6 +30,7 @@ from contacthop.orchestrator.policy import ChannelDecision, PolicyContext, decid
 from contacthop.orchestrator.voice import get_open_session, queue_speech
 from contacthop.orchestrator.windows import channel_window, open_channels
 from contacthop.outbound.formatting import email_send_meta
+from contacthop.outbound.guard import degenerate_reason
 from contacthop.outbound.limits import enforce_rate_limit
 
 
@@ -72,6 +73,17 @@ async def send_agent_message(
     preferred = contact.preferences.get("preferred_channel")
 
     await enforce_rate_limit(session, settings, contact)
+
+    if settings.repetition_guard:
+        reason = degenerate_reason(agent_msg.body)
+        if reason is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"message rejected by the repetition guard: {reason}. "
+                    "Compose a non-repetitive reply."
+                ),
+            )
 
     # A live call makes voice available regardless of identities — the open
     # session is the reachable address. Opted-out identities are unreachable.
