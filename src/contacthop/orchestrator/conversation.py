@@ -5,11 +5,9 @@ from __future__ import annotations
 import logging
 import uuid
 
-import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from contacthop.config import Settings
 from contacthop.domain.enums import (
     ChannelType,
     ConversationStatus,
@@ -134,17 +132,3 @@ def inbound_notification(message: Message, contact_id: uuid.UUID) -> AgentNotifi
         contact_id=contact_id,
         message=MessageRead.model_validate(message),
     )
-
-
-async def notify_agent(settings: Settings, notification: AgentNotification) -> None:
-    """Push a conversation event to the agent runtime's webhook, if configured."""
-    if not settings.agent_webhook_url:
-        return
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
-                settings.agent_webhook_url,
-                json=notification.model_dump(mode="json"),
-            )
-    except httpx.HTTPError:
-        logger.exception("agent webhook delivery failed")

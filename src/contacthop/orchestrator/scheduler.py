@@ -18,8 +18,12 @@ from contacthop.db.session import Database
 from contacthop.domain.enums import ChannelType, EventType, FollowUpStatus
 from contacthop.domain.models import Conversation, ConversationEvent, FollowUp, utcnow
 from contacthop.domain.schemas import AgentNotification
-from contacthop.orchestrator.conversation import notify_agent
 from contacthop.orchestrator.escalation import next_channel
+from contacthop.orchestrator.notifier import (
+    attempt_delivery,
+    deliver_due,
+    enqueue_notification,
+)
 from contacthop.orchestrator.windows import open_channels
 
 logger = logging.getLogger("contacthop.scheduler")
@@ -51,10 +55,15 @@ class FollowUpScheduler:
                 await self.fire_due()
             except Exception:
                 logger.exception("follow-up sweep failed")
+            try:
+                await deliver_due(self.db, self.settings)
+            except Exception:
+                logger.exception("webhook delivery sweep failed")
 
     async def fire_due(self) -> int:
         """Fire every pending follow-up whose deadline has passed. Returns count fired."""
-        notifications: list[AgentNotification] = []
+        fired = 0
+        delivery_ids = []
         async with self.db.session() as session:
             result = await session.execute(
                 select(FollowUp).where(
@@ -90,18 +99,23 @@ class FollowUpScheduler:
                         payload=payload,
                     )
                 )
-                notifications.append(
+                delivery = await enqueue_notification(
+                    session,
+                    self.settings,
                     AgentNotification(
                         event="conversation.follow_up.due",
                         conversation_id=conversation.id,
                         contact_id=conversation.contact_id,
                         payload=payload,
-                    )
+                    ),
                 )
+                if delivery is not None:
+                    delivery_ids.append(delivery.id)
+                fired += 1
             await session.commit()
 
-        for notification in notifications:
-            await notify_agent(self.settings, notification)
-        if notifications:
-            logger.info("fired %d follow-up(s)", len(notifications))
-        return len(notifications)
+        for delivery_id in delivery_ids:
+            await attempt_delivery(self.db, self.settings, delivery_id)
+        if fired:
+            logger.info("fired %d follow-up(s)", fired)
+        return fired

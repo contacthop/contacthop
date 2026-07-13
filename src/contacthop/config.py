@@ -53,6 +53,9 @@ class Settings(BaseSettings):
 
     # Where inbound conversation events are pushed for the agent runtime.
     agent_webhook_url: str | None = None
+    # Delivery attempts before a notification is dead-lettered (exponential
+    # backoff between attempts: 30s, 1m, 2m, ... capped at 2h).
+    agent_webhook_max_attempts: int = 8
 
     # Comma-separated Bearer tokens required on the /v1 management API.
     # Unset = open (dev mode). Webhooks use their own verification instead.

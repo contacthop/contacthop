@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Request
 
 from contacthop import __version__
 from contacthop.api.deps import require_api_key
-from contacthop.api.routes import contacts, conversations, dashboard, memory
+from contacthop.api.routes import contacts, conversations, dashboard, deliveries, memory
 from contacthop.api.webhooks import email_inbound, twilio_sms, twilio_voice
 from contacthop.channels.base import ChannelAdapter
 from contacthop.channels.email.console import ConsoleEmailAdapter
@@ -161,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(contacts.router, dependencies=protected)
     app.include_router(conversations.router, dependencies=protected)
     app.include_router(memory.router, dependencies=protected)
+    app.include_router(deliveries.router, dependencies=protected)
     app.include_router(dashboard.router)
     app.include_router(twilio_sms.router)
     app.include_router(twilio_voice.router)

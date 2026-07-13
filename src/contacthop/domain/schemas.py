@@ -16,6 +16,7 @@ from contacthop.domain.enums import (
     EventType,
     SessionState,
     Urgency,
+    WebhookDeliveryStatus,
 )
 
 
@@ -177,6 +178,23 @@ class ContactStatsRead(BaseModel):
     contact_id: uuid.UUID
     # Median seconds from an agent message to the human's reply, per channel.
     median_reply_seconds: dict[ChannelType, float]
+
+
+class AgentDeliveryRead(BaseModel):
+    """A webhook notification's delivery state (the outbox / dead letter view)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    event: str
+    conversation_id: uuid.UUID | None
+    payload: dict[str, Any]
+    status: WebhookDeliveryStatus
+    attempts: int
+    next_attempt_at: datetime
+    last_error: str | None
+    created_at: datetime
+    delivered_at: datetime | None
 
 
 class AgentNotification(BaseModel):

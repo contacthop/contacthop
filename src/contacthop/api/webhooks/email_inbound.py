@@ -7,17 +7,17 @@ by a shared secret (``CONTACTHOP_EMAIL_INBOUND_TOKEN``).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
 from contacthop.api.deps import SessionDep, SettingsDep
 from contacthop.domain.enums import ChannelType
 from contacthop.domain.schemas import EmailInboundPayload, InboundMessage
 from contacthop.orchestrator.conversation import (
     inbound_notification,
-    notify_agent,
     record_inbound,
     resolve_identity,
 )
+from contacthop.orchestrator.notifier import attempt_delivery, enqueue_notification
 
 router = APIRouter(prefix="/webhooks/email", tags=["webhooks"])
 
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/webhooks/email", tags=["webhooks"])
 @router.post("/inbound", status_code=202)
 async def inbound_email(
     payload: EmailInboundPayload,
+    request: Request,
     session: SessionDep,
     settings: SettingsDep,
     background: BackgroundTasks,
@@ -46,9 +47,12 @@ async def inbound_email(
     )
     message = await record_inbound(session, inbound)
     identity = await resolve_identity(session, inbound.channel, inbound.from_address)
-    notification = inbound_notification(message, identity.contact_id)
-    # Commit before the notification runs: the agent may synchronously call
-    # back into the API, which must not collide with this open transaction.
+    # Durable outbox: stored with this transaction, delivered in the background,
+    # retried by the scheduler if the agent is unreachable.
+    delivery = await enqueue_notification(
+        session, settings, inbound_notification(message, identity.contact_id)
+    )
     await session.commit()
-    background.add_task(notify_agent, settings, notification)
+    if delivery is not None:
+        background.add_task(attempt_delivery, request.app.state.db, settings, delivery.id)
     return {"status": "accepted"}

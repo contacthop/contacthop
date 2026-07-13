@@ -20,7 +20,8 @@ from contacthop.config import Settings
 from contacthop.domain.enums import ChannelType, DeliveryStatus, Direction, EventType
 from contacthop.domain.models import Conversation, ConversationEvent, Message
 from contacthop.domain.schemas import AgentNotification, MessageRead
-from contacthop.orchestrator.conversation import cancel_follow_ups, notify_agent
+from contacthop.orchestrator.conversation import cancel_follow_ups
+from contacthop.orchestrator.notifier import attempt_delivery, enqueue_notification
 from contacthop.orchestrator.voice import close_open_session, drain_queued_speech
 
 router = APIRouter(prefix="/webhooks/twilio/voice", tags=["webhooks"])
@@ -114,10 +115,12 @@ async def turn(
             contact_id=conversation.contact_id,
             message=MessageRead.model_validate(message),
         )
-        # Commit before the notification runs: the agent may synchronously call
-        # back into the API, which must not collide with this open transaction.
+        delivery = await enqueue_notification(session, settings, notification)
         await session.commit()
-        background.add_task(notify_agent, settings, notification)
+        if delivery is not None:
+            background.add_task(
+                attempt_delivery, request.app.state.db, settings, delivery.id
+            )
 
     cont = f"{base}/webhooks/twilio/voice/continue?conversation_id={conversation_id}&amp;polls=0"
     return _twiml(f'<Pause length="1"/><Redirect method="POST">{cont}</Redirect>')

@@ -17,10 +17,10 @@ from contacthop.domain.schemas import AgentNotification, InboundMessage
 from contacthop.orchestrator.consent import ConsentAction, classify
 from contacthop.orchestrator.conversation import (
     inbound_notification,
-    notify_agent,
     record_inbound,
     resolve_identity,
 )
+from contacthop.orchestrator.notifier import attempt_delivery, enqueue_notification
 
 
 def _twiml_reply(text: str | None = None) -> Response:
@@ -84,8 +84,10 @@ async def inbound_sms(
             contact_id=identity.contact_id,
             payload={"channel": "sms", "address": identity.address},
         )
+        delivery = await enqueue_notification(session, settings, notification)
         await session.commit()
-        background.add_task(notify_agent, settings, notification)
+        if delivery is not None:
+            background.add_task(attempt_delivery, request.app.state.db, settings, delivery.id)
         # STOP: no app-level reply — the carrier sends the mandated confirmation
         # and blocks further traffic. START: confirm resubscription.
         return _twiml_reply(
@@ -95,11 +97,14 @@ async def inbound_sms(
         await session.commit()
         return _twiml_reply(settings.sms_help_reply)
 
-    notification = inbound_notification(message, identity.contact_id)
-    # Commit before the notification runs: the agent may synchronously call
-    # back into the API, which must not collide with this open transaction.
+    # Durable outbox: stored with this transaction, delivered in the background,
+    # retried by the scheduler if the agent is unreachable.
+    delivery = await enqueue_notification(
+        session, settings, inbound_notification(message, identity.contact_id)
+    )
     await session.commit()
-    background.add_task(notify_agent, settings, notification)
+    if delivery is not None:
+        background.add_task(attempt_delivery, request.app.state.db, settings, delivery.id)
 
     # Empty TwiML: acknowledge without auto-replying; the agent decides the reply.
     return _twiml_reply()
@@ -152,6 +157,10 @@ async def sms_delivery_status(
                     "provider_status": form.get("MessageStatus"),
                 },
             )
+            delivery = await enqueue_notification(session, settings, notification)
             await session.commit()
-            background.add_task(notify_agent, settings, notification)
+            if delivery is not None:
+                background.add_task(
+                    attempt_delivery, request.app.state.db, settings, delivery.id
+                )
     return {"status": "ok"}

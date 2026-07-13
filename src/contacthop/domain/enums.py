@@ -36,6 +36,12 @@ class EventType(StrEnum):
     NOTE = "note"
 
 
+class WebhookDeliveryStatus(StrEnum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    EXHAUSTED = "exhausted"
+
+
 class SessionState(StrEnum):
     OPEN = "open"
     CLOSED = "closed"

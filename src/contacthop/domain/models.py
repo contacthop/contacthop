@@ -19,6 +19,7 @@ from contacthop.domain.enums import (
     EventType,
     FollowUpStatus,
     SessionState,
+    WebhookDeliveryStatus,
 )
 
 E = TypeVar("E", bound=StrEnum)
@@ -164,6 +165,32 @@ class FollowUp(Base):
     )
     attempt: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AgentDelivery(Base):
+    """Durable outbox for agent webhook notifications.
+
+    Every notification is stored before delivery is attempted; failures retry
+    with exponential backoff until EXHAUSTED (dead letter), so a briefly-down
+    agent runtime never silently loses an inbound message or follow-up.
+    """
+
+    __tablename__ = "agent_deliveries"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    event: Mapped[str] = mapped_column(String(80))
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    status: Mapped[WebhookDeliveryStatus] = mapped_column(
+        str_enum(WebhookDeliveryStatus), default=WebhookDeliveryStatus.PENDING
+    )
+    attempts: Mapped[int] = mapped_column(default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ConversationEvent(Base):

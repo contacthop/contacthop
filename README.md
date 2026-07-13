@@ -130,6 +130,8 @@ app = hop.app  # run: uvicorn my_agent:app --port 9000
 
 Point `CONTACTHOP_AGENT_WEBHOOK_URL=http://127.0.0.1:9000/` at it and every inbound message — SMS, email, or spoken voice turn — lands in `handle`. The client is also usable standalone (`ContactHopClient`) for scripting: `create_contact`, `create_conversation`, `send`, `call`, `switch`, `transcript`, `context`, `stats`. See `examples/echo_agent.py`.
 
+**Delivery is durable (at-least-once).** Every notification is persisted before it's sent, delivered immediately, and retried with exponential backoff (30s → 2h, `CONTACTHOP_AGENT_WEBHOOK_MAX_ATTEMPTS` tries) if your agent is unreachable — a runtime that's down for a minute loses nothing. Exhausted notifications become a dead-letter queue at `GET /v1/deliveries?status=exhausted`, re-armable with `POST /v1/deliveries/{id}/retry` once the agent is back. Make your handlers idempotent: a delivery that times out after processing will be retried.
+
 The policy engine also learns per-contact responsiveness: `GET /v1/contacts/<id>/stats` exposes median reply latency per channel, and high-urgency messages automatically use the contact's fastest-responding channel once data exists.
 
 ## Contact memory (graph-backed)
@@ -229,7 +231,8 @@ cp demo.env .env
 | `CONTACTHOP_SMTP_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` / `_FROM_ADDRESS` / `_STARTTLS` | — | Required for the SMTP adapter (host + from address at minimum) |
 | `CONTACTHOP_EMAIL_INBOUND_TOKEN` | — | Shared secret (`X-ContactHop-Token`) guarding the inbound email webhook |
 | `CONTACTHOP_PUBLIC_BASE_URL` | — | Public URL of this deployment, used for webhook signature validation |
-| `CONTACTHOP_AGENT_WEBHOOK_URL` | — | Where conversation events are pushed for your agent |
+| `CONTACTHOP_AGENT_WEBHOOK_URL` | — | Where conversation events are pushed for your agent (durable, at-least-once) |
+| `CONTACTHOP_AGENT_WEBHOOK_MAX_ATTEMPTS` | `8` | Delivery attempts (exponential backoff) before a notification is dead-lettered |
 | `CONTACTHOP_FOLLOW_UP_POLL_INTERVAL` | `5.0` | Seconds between scheduler sweeps for due follow-ups |
 | `CONTACTHOP_SEND_WINDOW_SMS` / `_EMAIL` / `_VOICE` | — (always) | Per-channel send window (quiet hours), `HH:MM-HH:MM`, may wrap midnight |
 | `CONTACTHOP_DEFAULT_TIMEZONE` | `UTC` | IANA timezone the windows are evaluated in when a contact has none |
