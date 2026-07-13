@@ -93,12 +93,12 @@
   #t-notif.bad .v { color: var(--critical); }
   #t-notif.bad { border-color: var(--critical); }
 
-  /* delivery inspector */
-  #dlmodal {
+  /* modal overlays (delivery inspector, agents) */
+  #dlmodal, #agmodal {
     position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 50;
     display: grid; place-items: center;
   }
-  #dlmodal[hidden] { display: none; }
+  #dlmodal[hidden], #agmodal[hidden] { display: none; }
   .sheet {
     width: min(680px, 92vw); max-height: 72vh; display: flex; flex-direction: column;
     background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px;
@@ -108,6 +108,30 @@
     padding: 12px 16px; border-bottom: 1px solid var(--grid); font-weight: 650;
   }
   #dllist { overflow-y: auto; padding: 10px 16px 16px; }
+  .sheetbody { overflow-y: auto; padding: 10px 16px 16px; }
+  .tenant {
+    display: inline-block; font-size: 10.5px; color: var(--ink-2);
+    background: var(--wash-2); border-radius: 999px; padding: 1px 9px; flex-shrink: 0;
+  }
+  .agrow {
+    border: 1px solid var(--grid); border-radius: 9px; padding: 10px 12px; margin-top: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .agrow .name { font-weight: 620; }
+  .agrow .hook { color: var(--ink-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  #agform { display: flex; gap: 8px; margin-top: 14px; }
+  #agform input {
+    flex: 1; padding: 7px 10px; font-size: 12.5px; border: 1px solid var(--hairline);
+    border-radius: 7px; background: var(--page); color: var(--ink);
+  }
+  #agkey {
+    margin-top: 12px; border: 1px solid var(--good); border-radius: 9px; padding: 10px 12px;
+    font-size: 12.5px;
+  }
+  #agkey input {
+    width: 100%; margin-top: 6px; padding: 6px 9px; font: 12px ui-monospace, monospace;
+    border: 1px solid var(--hairline); border-radius: 6px; background: var(--page); color: var(--ink);
+  }
   .dl { border: 1px solid var(--grid); border-radius: 9px; padding: 10px 12px; margin-top: 8px; }
   .dl .row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
   .dl .ev { font-weight: 620; }
@@ -293,6 +317,7 @@
   <span class="spacer"></span>
   <span id="health"><span class="dot"></span><span id="healthtext">connecting…</span></span>
   <a href="/docs" target="_blank" rel="noopener">API docs</a>
+  <button id="agentsbtn" class="ghost" hidden>Agents</button>
   <button id="themebtn" class="ghost" title="Toggle light/dark theme" aria-label="Toggle theme">☀</button>
   <input id="key" type="password" placeholder="API key" autocomplete="off" aria-label="API key">
 </header>
@@ -320,6 +345,24 @@
       <button id="dlclose" class="ghost" aria-label="Close">✕</button>
     </div>
     <div id="dllist"></div>
+  </div>
+</div>
+
+<div id="agmodal" hidden>
+  <div class="sheet" role="dialog" aria-label="Agents">
+    <div class="sheethead">
+      <span>Agents (tenants)</span>
+      <button id="agclose" class="ghost" aria-label="Close">✕</button>
+    </div>
+    <div class="sheetbody">
+      <div id="aglist"></div>
+      <div id="agkey" hidden></div>
+      <form id="agform">
+        <input id="agname" placeholder="New agent name" autocomplete="off" required>
+        <input id="agwebhook" placeholder="Webhook URL (optional — falls back to global)" autocomplete="off">
+        <button type="submit" class="ghost">Create agent</button>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -367,6 +410,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   conversations: [], contacts: {}, selected: null,
   filter: "all", search: "", drawer: false,
+  agents: null,  // null = not admin; [] = admin with no tenants
 };
 
 const keyInput = $("key");
@@ -393,18 +437,32 @@ function esc(s) {
   })[c]);
 }
 
-async function api(path, options = {}) {
+async function api(path, options = {}, quiet = false) {
   const headers = { "content-type": "application/json", ...(options.headers || {}) };
   if (keyInput.value) headers["Authorization"] = "Bearer " + keyInput.value;
   const resp = await fetch(path, { ...options, headers });
-  if (resp.status === 401) { banner("Unauthorized — enter a valid API key (top right)."); throw new Error("401"); }
+  if (resp.status === 401) {
+    if (!quiet) banner("Unauthorized — enter a valid API key (top right).");
+    throw new Error("401");
+  }
   if (!resp.ok) {
     let detail = resp.statusText;
     try { detail = (await resp.json()).detail || detail; } catch {}
     throw new Error(detail);
   }
-  banner(null);
+  if (!quiet) banner(null);
   return resp.status === 204 ? null : resp.json();
+}
+
+function agentName(id) {
+  if (!state.agents || !id) return null;
+  const agent = state.agents.find(a => a.id === id);
+  return agent ? agent.name : null;
+}
+
+function tenantChip(id) {
+  const name = agentName(id);
+  return name ? `<span class="tenant">${esc(name)}</span>` : "";
 }
 
 function banner(text) {
@@ -456,6 +514,10 @@ async function refresh() {
       api("/v1/deliveries?status=pending&limit=100"),
     ]);
     state.deliveries = [...dead, ...pendingDeliveries];
+    try {
+      state.agents = await api("/v1/agents", {}, true);  // 403 for agent-scoped keys
+      $("agentsbtn").hidden = false;
+    } catch { state.agents = null; $("agentsbtn").hidden = true; }
     $("t-dead").textContent = dead.length;
     $("t-notif-l").textContent = `Dead letters · ${pendingDeliveries.length} pending`;
     $("t-notif").classList.toggle("bad", dead.length > 0);
@@ -509,7 +571,7 @@ function renderList() {
         <div class="row1"><span class="who">${esc(name)}</span>
           <span class="time">${esc(rel(c.created_at))}</span></div>
         <div class="goal">${esc(c.goal || "(no goal)")}</div>
-        <div class="row3">${badge(c.current_channel)}<span class="status">${esc(c.status)}</span></div>
+        <div class="row3">${badge(c.current_channel)}${tenantChip(c.agent_id)}<span class="status">${esc(c.status)}</span></div>
       </div>
     </div>`;
   }).join("");
@@ -547,7 +609,7 @@ async function loadTimeline(id, keepScroll) {
   if (conversation) {
     $("panelhead").innerHTML =
       `<span class="who">${esc(contactName(conversation.contact_id))}</span>` +
-      badge(conversation.current_channel) +
+      badge(conversation.current_channel) + tenantChip(conversation.agent_id) +
       `<span class="goal">${esc(conversation.goal || "")}</span>` +
       `<span class="spacer"></span>` +
       `<button id="drawerbtn" class="ghost ${state.drawer ? "on" : ""}">Contact &amp; memory</button>`;
@@ -680,7 +742,7 @@ function renderDeliveries() {
     <div class="dl">
       <div class="row">
         <span class="chip ${esc(d.status)}">${esc(d.status)}</span>
-        <span class="ev">${esc(d.event)}</span>
+        <span class="ev">${esc(d.event)}</span>${tenantChip(d.agent_id)}
         <span class="meta">${d.attempts} attempt${d.attempts === 1 ? "" : "s"} · ${esc(rel(d.created_at))} ago</span>
       </div>
       ${d.last_error ? `<div class="err">${esc(d.last_error)}</div>` : ""}
@@ -700,6 +762,54 @@ function renderDeliveries() {
 $("t-notif").addEventListener("click", () => { $("dlmodal").hidden = false; renderDeliveries(); });
 $("dlclose").addEventListener("click", () => { $("dlmodal").hidden = true; });
 $("dlmodal").addEventListener("click", (ev) => { if (ev.target.id === "dlmodal") $("dlmodal").hidden = true; });
+
+/* ── agents (tenants) admin ────────────────────────────────── */
+
+function showKey(agent) {
+  $("agkey").hidden = false;
+  $("agkey").innerHTML =
+    `API key for <b>${esc(agent.name)}</b> — copy it now, it is never shown again:` +
+    `<input readonly value="${esc(agent.api_key)}" onclick="this.select()">`;
+}
+
+function renderAgents() {
+  const rows = state.agents || [];
+  $("aglist").innerHTML = rows.length ? rows.map(a => `
+    <div class="agrow">
+      <span class="name">${esc(a.name)}</span>
+      <span class="hook">${esc(a.webhook_url || "→ global webhook")}</span>
+      <button class="ghost" data-rotate="${a.id}">Rotate key</button>
+    </div>`).join("")
+    : '<div class="empty">No tenants yet — admin keys see everything. Create an agent to isolate a runtime.</div>';
+  $("aglist").querySelectorAll("[data-rotate]").forEach(btn =>
+    btn.addEventListener("click", async () => {
+      try { showKey(await api(`/v1/agents/${btn.dataset.rotate}/rotate-key`, { method: "POST" })); }
+      catch (err) { banner("Rotate failed: " + err.message); }
+    }));
+}
+
+$("agentsbtn").addEventListener("click", () => {
+  $("agkey").hidden = true;
+  $("agmodal").hidden = false;
+  renderAgents();
+});
+$("agclose").addEventListener("click", () => { $("agmodal").hidden = true; });
+$("agmodal").addEventListener("click", (ev) => { if (ev.target.id === "agmodal") $("agmodal").hidden = true; });
+$("agform").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = $("agname").value.trim();
+  if (!name) return;
+  try {
+    const created = await api("/v1/agents", {
+      method: "POST",
+      body: JSON.stringify({ name, webhook_url: $("agwebhook").value.trim() || null }),
+    });
+    $("agname").value = ""; $("agwebhook").value = "";
+    await refresh();
+    renderAgents();
+    showKey(created);
+  } catch (err) { banner("Create failed: " + err.message); }
+});
 
 /* ── composer ──────────────────────────────────────────────── */
 

@@ -43,6 +43,7 @@ class ContactRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    agent_id: uuid.UUID | None = None
     display_name: str | None
     preferences: dict[str, Any]
     identities: list[ChannelIdentityRead]
@@ -60,6 +61,7 @@ class ConversationRead(BaseModel):
 
     id: uuid.UUID
     contact_id: uuid.UUID
+    agent_id: uuid.UUID | None = None
     status: ConversationStatus
     current_channel: ChannelType
     goal: str | None
@@ -211,6 +213,7 @@ class AgentDeliveryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    agent_id: uuid.UUID | None = None
     event: str
     conversation_id: uuid.UUID | None
     payload: dict[str, Any]
