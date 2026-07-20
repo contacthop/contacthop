@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Query
 
-from contacthop.api.deps import MemoryDep, PrincipalDep, SessionDep, ensure_visible
+from contacthop.api.deps import MemoryDep, Principal, PrincipalDep, SessionDep, ensure_visible
 from contacthop.domain.models import Contact
 from contacthop.domain.schemas import ContactMemoryFact, MemoryFact, MemoryFactCreate
 from contacthop.memory.store import MemoryDisabledError
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/v1", tags=["memory"])
 
 
 async def _require_contact(
-    session: SessionDep, contact_id: uuid.UUID, principal
+    session: SessionDep, contact_id: uuid.UUID, principal: Principal
 ) -> Contact:
     contact = await session.get(Contact, contact_id)
     if contact is None:

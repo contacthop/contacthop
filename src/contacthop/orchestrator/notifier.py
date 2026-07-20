@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import timedelta
+from typing import Any
 
 import httpx
 from sqlalchemy import select
@@ -34,10 +35,10 @@ SWEEP_BATCH = 20
 
 
 def backoff_seconds(attempts: int) -> int:
-    return min(BACKOFF_BASE_SECONDS * 2 ** max(attempts - 1, 0), BACKOFF_CAP_SECONDS)
+    return int(min(BACKOFF_BASE_SECONDS * 2 ** max(attempts - 1, 0), BACKOFF_CAP_SECONDS))
 
 
-async def _post(url: str, payload: dict) -> None:
+async def _post(url: str, payload: dict[str, Any]) -> None:
     """One delivery attempt; raises on network errors and non-2xx responses."""
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.post(url, json=payload)

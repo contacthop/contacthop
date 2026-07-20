@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -55,7 +56,7 @@ class Principal:
     is_admin: bool = False
 
     @property
-    def agent_id(self):  # noqa: ANN201 - uuid.UUID | None
+    def agent_id(self) -> uuid.UUID | None:
         return self.agent.id if self.agent else None
 
 
@@ -100,7 +101,7 @@ def require_admin(principal: Principal) -> None:
         raise HTTPException(status_code=403, detail="admin API key required")
 
 
-def ensure_visible(owner_agent_id, principal: Principal) -> None:  # noqa: ANN001
+def ensure_visible(owner_agent_id: uuid.UUID | None, principal: Principal) -> None:
     """404 when an agent-scoped key touches another tenant's row (indistinguishable
     from nonexistent — no cross-tenant existence oracle)."""
     if principal.agent is not None and owner_agent_id != principal.agent.id:
