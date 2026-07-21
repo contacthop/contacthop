@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import cast
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import select
@@ -207,7 +208,7 @@ async def originate_call(
     adapter = adapters.get(ChannelType.VOICE)
     if adapter is None or not hasattr(adapter, "originate_call"):
         raise HTTPException(status_code=422, detail="no voice adapter configured")
-    voice_adapter: VoiceAdapter = adapter
+    voice_adapter = cast(VoiceAdapter, adapter)
     if ChannelType.VOICE not in open_channels(
         settings, conversation.contact, {ChannelType.VOICE}
     ):

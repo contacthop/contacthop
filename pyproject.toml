@@ -78,3 +78,7 @@ python_version = "3.11"
 strict = true
 packages = ["contacthop"]
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = "falkordb.*"
+ignore_missing_imports = true
