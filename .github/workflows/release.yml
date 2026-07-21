@@ -1,0 +1,51 @@
+name: Release to PyPI
+
+# Publishes when a GitHub Release is published (create a tag like v0.1.0).
+# Uses PyPI Trusted Publishing (OIDC) — no API tokens stored anywhere.
+# One-time setup on pypi.org: Account → Publishing → add a "pending publisher":
+#   project: contacthop, owner: contacthop, repo: contacthop,
+#   workflow: release.yml, environment: pypi
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        run: |
+          uv sync
+          uv run pytest -q
+      - name: Build distributions
+        run: uv build
+      - name: Check version matches tag
+        run: |
+          WHEEL_VERSION=$(ls dist/*.whl | sed -E 's/.*contacthop-([0-9.]+[0-9])-.*/\1/')
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "wheel=$WHEEL_VERSION tag=$TAG_VERSION"
+          test "$WHEEL_VERSION" = "$TAG_VERSION" || { echo "version/tag mismatch"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # OIDC for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

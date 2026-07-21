@@ -402,6 +402,15 @@ uv run ruff check .
 
 CI (GitHub Actions) runs ruff, the test suite on Python 3.11–3.13, a package build, and a Docker image build on every push and pull request.
 
+### Releasing to PyPI
+
+Releases publish automatically via [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) — no API tokens live in the repo. One-time setup: on pypi.org → *Your account → Publishing*, add a pending publisher for project `contacthop` (owner `contacthop`, repo `contacthop`, workflow `release.yml`, environment `pypi`), and create a `pypi` environment in the repo's GitHub settings. Then, to ship a version:
+
+1. Bump `version` in `pyproject.toml` and `src/contacthop/__init__.py`
+2. Tag and publish a GitHub Release named `v<version>` (e.g. `v0.1.0`)
+
+The workflow re-runs the tests, builds, verifies the wheel version matches the tag, and publishes.
+
 
 ## License
 
